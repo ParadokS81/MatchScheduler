@@ -1,0 +1,147 @@
+<script>
+    /*
+     * Schedule Manager - Grid Selection & Interaction
+     *
+     * @version 1.0.0 (2025-06-07) - Extracted from 02-core.html for better organization.
+     *
+     * Purpose: Grid cell selection logic and user interaction handling
+     * Dependencies: Global variables from 01-init.html (selectedCells, isShiftPressed, lastClickedCell)
+     * Provides: Cell selection, visual state management, grid interaction handlers
+     * Functions: addCellToSelection, handleCellClick, selectTimeRow, selectDayColumn, selectAllCells
+     */
+    // Selection helper functions
+    function addCellToSelection(row, col, gridId) {
+        const cellKey = row + ',' + col + ',' + gridId;
+        selectedCells.add(cellKey);
+        updateCellVisualState(row, col, gridId, true);
+        updateSelectionCounter();
+    }
+
+    function removeCellFromSelection(row, col, gridId) {
+        const cellKey = row + ',' + col + ',' + gridId;
+        selectedCells.delete(cellKey);
+        updateCellVisualState(row, col, gridId, false);
+        updateSelectionCounter();
+    }
+
+    function toggleCellSelection(row, col, gridId) {
+        const cellKey = row + ',' + col + ',' + gridId;
+        if (selectedCells.has(cellKey)) {
+            removeCellFromSelection(row, col, gridId);
+        } else {
+            addCellToSelection(row, col, gridId);
+        }
+    }
+
+    function clearAllSelections() {
+        selectedCells.forEach(function(cellKey) {
+            const parts = cellKey.split(',');
+            const row = parseInt(parts[0]);
+            const col = parseInt(parts[1]);
+            const gridId = parts[2];
+            updateCellVisualState(row, col, gridId, false);
+        });
+        selectedCells.clear();
+        updateSelectionCounter();
+    }
+
+    function updateCellVisualState(row, col, gridId, isSelected) {
+    const grid = document.getElementById('availability-grid-' + gridId);
+    
+    // --- DEBUG START ---
+    if (!grid) {
+        console.error(`[DEBUG] updateCellVisualState: Could not find grid with id 'availability-grid-${gridId}'`);
+        return;
+    }
+    // --- DEBUG END ---
+
+    const cell = grid.querySelector('tbody tr:nth-child(' + (row + 1) + ') td:nth-child(' + (col + 2) + ')');
+    
+    // --- DEBUG START ---
+    if (!cell) {
+        console.error(`[DEBUG] updateCellVisualState: Could not find cell at row ${row}, col ${col} in grid ${gridId}.`);
+        return;
+    }
+    // --- DEBUG END ---
+    
+    if (isSelected) {
+        cell.classList.add('cell-selected');
+    } else {
+        cell.classList.remove('cell-selected');
+    }
+  }
+
+
+    function updateSelectionCounter() {
+        const count = selectedCells.size;
+        // Update Grid Tools header to show selection count
+        const gridToolsSpan = document.querySelector('.collapsible-trigger span:first-child');
+        if (gridToolsSpan && gridToolsSpan.textContent.includes('Grid Tools')) {
+            if (count > 0) {
+                gridToolsSpan.textContent = 'Grid Tools (' + count + ' selected)';
+            } else {
+                gridToolsSpan.textContent = 'Grid Tools';
+            }
+        }
+    }
+
+    // Cell click handler - FIXED VERSION
+    function handleCellClick(row, col, gridId) {
+        if (isShiftPressed && lastClickedCell && lastClickedCell.gridId === gridId) {
+            // Shift+click for rectangle selection (only within same week)
+            selectRectangle(lastClickedCell.row, lastClickedCell.col, row, col, gridId);
+        } else {
+            // Regular click for toggle (or cross-week shift+click)
+            toggleCellSelection(row, col, gridId);
+            lastClickedCell = { row: row, col: col, gridId: gridId };
+        }
+    }
+
+    // Select entire time row
+    function selectTimeRow(timeIndex, gridId) {
+        for (let col = 0; col < 7; col++) {
+            addCellToSelection(timeIndex, col, gridId);
+        }
+    }
+
+    // Select entire day column  
+    function selectDayColumn(dayIndex, gridId) {
+        const grid = document.getElementById('availability-grid-' + gridId);
+        if (!grid) return;
+        
+        const rows = grid.querySelectorAll('tbody tr');
+        for (let row = 0; row < rows.length; row++) {
+            addCellToSelection(row, dayIndex, gridId);
+        }
+    }
+
+    // Select rectangle between two points
+    function selectRectangle(startRow, startCol, endRow, endCol, gridId) {
+        const minRow = Math.min(startRow, endRow);
+        const maxRow = Math.max(startRow, endRow);
+        const minCol = Math.min(startCol, endCol);
+        const maxCol = Math.max(startCol, endCol);
+        
+        for (let row = minRow; row <= maxRow; row++) {
+            for (let col = minCol; col <= maxCol; col++) {
+                addCellToSelection(row, col, gridId);
+            }
+        }
+    }
+
+    // Select all cells in both grids
+    function selectAllCells() {
+        ['week1', 'week2'].forEach(function(gridId) {
+            const grid = document.getElementById('availability-grid-' + gridId);
+            if (!grid) return;
+            
+            const rows = grid.querySelectorAll('tbody tr');
+            rows.forEach(function(row, timeIndex) {
+                for (let col = 0; col < 7; col++) {
+                    addCellToSelection(timeIndex, col, gridId);
+                }
+            });
+        });
+    }
+
+  </script>

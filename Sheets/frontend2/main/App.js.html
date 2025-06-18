@@ -1,0 +1,452 @@
+<script>
+const App = (function() {
+    // =========================================================================
+    // PRIVATE STATE
+    // =========================================================================
+    let _userContext = null;
+    let _activeTeam = null;
+    let _weekOffset = 0; // 0 = this week & next, 1 = week+2 & week+3, etc.
+    let _scheduleDataCache = []; // Cache to hold all 4 weeks of data
+    let _pollIntervalId = null; // This will hold the ID of our timer
+    let _lastServerTimestamp = 0; // Tracks the timestamp of the last known server data
+    const POLL_INTERVAL_MS = 30000; // 30 seconds
+
+    // =========================================================================
+    // PRIVATE METHODS (Data Fetching & Handling)
+    // =========================================================================
+
+    /**
+     * Fetches all the necessary data from the backend when the app starts.
+     */
+    function _fetchInitialData() {
+        console.log("App: Fetching initial data from server...");
+        google.script.run
+            .withSuccessHandler(_onInitialDataSuccess)
+            .withFailureHandler(_onDataFetchFailure)
+            .getUserContext();
+    }
+
+    /**
+     * Handles all UI updates and renders the grid immediately from the
+     * data it receives, without making a second server call.
+     */
+    function _onInitialDataSuccess(context) {
+        console.log("App: Processing pre-loaded data package.", context);
+        if (!context || !context.isAuthenticated) {
+            console.error("App: User is not authenticated or context is invalid.");
+            return;
+        }
+
+        // 1. Store context and team data from the initial package
+        _userContext = context;
+        _activeTeam = context.teams && context.teams.length > 0 ? context.teams[0] : null;
+
+        // 2. CRITICAL: Save the full 4-week schedule into our client-side cache
+        if (context.schedule && context.schedule.weeks && context.schedule.weeks.length > 0) {
+            _scheduleDataCache = context.schedule.weeks;
+            console.log(`App: Stored ${_scheduleDataCache.length} weeks of schedule data in cache.`);
+        } else {
+            console.error("App: CRITICAL - Initial schedule data is missing from the data package!");
+        }
+        _lastServerTimestamp = context.schedule ? context.schedule.serverTimestamp : new Date().getTime();
+
+        // 3. Update all relevant UI components with the initial data
+        if (_userContext) {
+            UserProfile.update(_userContext);
+        }
+        if (_activeTeam) {
+            TeamInfo.update(_activeTeam, _userContext);
+        }
+        
+        // --- START: Added call to render the favorites list ---
+        // NOTE: This assumes the backend is providing a `favoriteTeams` array of objects
+        // in the user context, not just an array of IDs.
+        if (context.favoriteTeams) {
+            FavoritesList.render(context.favoriteTeams);
+        }
+        // --- END: Added call to render the favorites list ---
+
+        // 4. Perform the initial render of the grids and navigation using the cache
+        _renderVisibleGridsFromCache();
+        console.log("--- DEBUG: Checking App object right before the error ---");
+        console.log(App);
+        GridTools.updateWeekLabels();
+    }
+
+    // ADD this new function anywhere inside the App module in App.js.html
+
+/**
+ * REPLACEMENT for requestTeamSwitch
+ * This new version calls a dedicated backend function to get the schedule
+ * for the new team, then updates the UI correctly.
+ */
+function requestTeamSwitch(teamId) {
+    if (_activeTeam && _activeTeam.teamId === teamId) {
+        return; // Don't switch to the team that is already active
+    }
+
+    console.log(`App: Switching to team ${teamId}...`);
+    // Ideally, show a loading indicator here
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response.success && response.weeks) {
+                // Find the new team's data from the already-loaded user context
+                const newActiveTeam = _userContext.teams.find(t => t.teamId === teamId);
+                
+                // Update the app's state
+                _activeTeam = newActiveTeam;
+                _scheduleDataCache = response.weeks; // Use the new schedule data
+
+                // Re-render all necessary components
+                TeamInfo.update(_activeTeam, _userContext);
+                _renderVisibleGridsFromCache();
+                
+                console.log(`App: Switched successfully to team ${newActiveTeam.teamName}`);
+            } else {
+                console.error("Failed to get schedule for new team", response);
+            }
+        })
+        .withFailureHandler(_onDataFetchFailure)
+        .getScheduleForTeam(teamId); // Call our new, targeted backend function
+}
+
+    /**
+     * Pings the server periodically to check for any changes to the active team.
+     */
+    function _pollForServerChanges() {
+        if (!_activeTeam || !_activeTeam.teamId) {
+            // Don't poll if there's no active team selected
+            return;
+        }
+
+        console.log(`App: Polling for updates for team ${_activeTeam.teamId}...`);
+        google.script.run
+            .withSuccessHandler(_handlePollResponse)
+            .withFailureHandler(_onDataFetchFailure)
+            .checkForScheduleUpdates(_activeTeam.teamId, _lastServerTimestamp);
+    }
+
+    /**
+     * This function runs if any backend call fails.
+     */
+    function _onDataFetchFailure(error) {
+        console.error("App: Failed to fetch data from server.", error);
+        // Ideally, show a user-friendly error message in the UI.
+    }
+
+    /**
+     * Handles the response from the polling check. Routes updates to the correct components.
+     */
+    function _handlePollResponse(response) {
+        if (response && response.success && response.hasChanges) {
+            console.log("App: Changes detected from server!", response);
+
+            // Always update our timestamp to prevent repeated notifications for the same change
+            _lastServerTimestamp = response.serverTimestamp;
+
+            // Route the update based on the type of change
+            switch (response.changeType) {
+                case 'availability':
+                    // For availability changes, we need to get the full new schedule data
+                    // and update our cache, then re-render the grids.
+                    if (response.schedule && response.schedule.weeks) {
+                        _scheduleDataCache = response.schedule.weeks;
+                        _renderVisibleGridsFromCache();
+                        console.log("App: Availability grid updated from polling.");
+                    }
+                    break;
+
+                case 'roster':
+                    // A player has joined or left. We need to update the team info panel.
+                    console.log("App: Roster change detected. Refresh needed.");
+                    // A simple page reload is a reliable way to handle major changes for now.
+                    // window.location.reload(); 
+                    break;
+                    
+                case 'team_settings':
+                    console.log("App: Team settings change detected. Refresh needed.");
+                    // window.location.reload();
+                    break;
+                    
+                default:
+                    console.log(`App: Unhandled change type: ${response.changeType}`);
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Renders the visible grids from the cache
+     */
+    function _renderVisibleGridsFromCache() {
+        // Get the week data from cache
+        const week1Data = _scheduleDataCache[_weekOffset * 2];     // index 0 or 2
+        const week2Data = _scheduleDataCache[_weekOffset * 2 + 1]; // index 1 or 3
+
+        // Render the grids
+        if (week1Data) AvailabilityGrid.render('availability-grid-week1', week1Data);
+        if (week2Data) AvailabilityGrid.render('availability-grid-week2', week2Data);
+        
+        // Update navigation with proper week info and button states
+        WeekNavigation.updateDisplay({
+            week1Data: week1Data,
+            week2Data: week2Data,
+            canGoPrev: _weekOffset > 0,  // Can only go prev if we're viewing weeks 3-4
+            canGoNext: _weekOffset < 1   // Can only go next if we're viewing weeks 1-2
+        });
+    }
+
+    function refreshUserContext() {
+    console.log("App: Refreshing full user context from server...");
+    google.script.run
+        .withSuccessHandler(_onInitialDataSuccess) // We can reuse our existing success handler!
+        .withFailureHandler(_onDataFetchFailure)
+        .getUserContext(); // This backend function gets all necessary data
+    }
+
+    /**
+     * Measures the main grids and adjusts side panel heights to match.
+     */
+    function _updatePanelHeights() {
+        console.log("=== PANEL HEIGHT DEBUG START ===");
+        
+        const week1Grid = document.getElementById('availability-grid-week1');
+        const week2Grid = document.getElementById('availability-grid-week2');
+        if (!week1Grid || !week2Grid) {
+            console.log("Grids not found!");
+            return;
+        }
+
+        const week1Container = week1Grid.parentElement;
+        const week2Container = week2Grid.parentElement;
+        
+        // Log all height-related properties
+        console.log("Week1 Container:");
+        console.log("  - offsetHeight:", week1Container.offsetHeight);
+        console.log("  - clientHeight:", week1Container.clientHeight);
+        console.log("  - scrollHeight:", week1Container.scrollHeight);
+        console.log("  - getBoundingClientRect().height:", week1Container.getBoundingClientRect().height);
+        console.log("  - computed style height:", window.getComputedStyle(week1Container).height);
+        console.log("  - inline style height:", week1Container.style.height);
+        
+        console.log("Week1 Grid Table:");
+        console.log("  - offsetHeight:", week1Grid.offsetHeight);
+        console.log("  - row count:", week1Grid.getElementsByTagName('tr').length);
+        
+        const favoritesPanel = document.getElementById('grid-cell-middle-right');
+        if (favoritesPanel) {
+            const listContainer = favoritesPanel.querySelector('#favorites-list-container');
+            if (listContainer) {
+                console.log("Favorites container BEFORE update:");
+                console.log("  - style.height:", listContainer.style.height);
+                console.log("  - offsetHeight:", listContainer.offsetHeight);
+                
+                listContainer.style.height = `${week1Container.getBoundingClientRect().height - 40}px`;
+                
+                console.log("Favorites container AFTER update:");
+                console.log("  - style.height:", listContainer.style.height);
+            }
+        }
+        
+        console.log("=== PANEL HEIGHT DEBUG END ===");
+    }
+
+    // =========================================================================
+    // PUBLIC API
+    // =========================================================================
+
+    /**
+     * Initializes all services and components. This is the main entry point of the app.
+     */
+    function init(initialData) {
+        console.log("App: Initializing with pre-loaded data...");
+
+        // Initialize Services FIRST
+        GridSelectionService.init();
+        TemplateService.init();
+
+        // Initialize All UI Components
+        UserProfile.init('grid-cell-top-left');
+        WeekNavigation.init('grid-cell-top-center');
+        MatchFilters.init('grid-cell-top-right');
+        TeamInfo.init('grid-cell-middle-left');
+        GridTools.init('grid-cell-bottom-left');
+        BrowseTeams.init('grid-cell-bottom-right');
+        FavoritesList.init('grid-cell-middle-right');
+        AvailabilityGrid.init('availability-grid-week1');
+        AvailabilityGrid.init('availability-grid-week2');
+        
+        // Use the pre-loaded data to populate the UI
+        if (initialData && initialData.isAuthenticated) {
+            _onInitialDataSuccess(initialData);
+        } else {
+            console.error("App: User is not authenticated or no initial data was provided.");
+        }
+        
+        // Start polling for changes
+        _pollIntervalId = setInterval(_pollForServerChanges, POLL_INTERVAL_MS);
+
+        // NEW: Dynamically fetch BLOCK_CONFIG from server and set it to window.BLOCK_CONFIG_CLIENT
+        // This ensures the client-side config is fully available after initialization.
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response.success && response.config) {
+                    window.BLOCK_CONFIG_CLIENT = response.config;
+                    console.log("App: BLOCK_CONFIG_CLIENT loaded dynamically.", window.BLOCK_CONFIG_CLIENT);
+                } else {
+                    console.error("App: Failed to load BLOCK_CONFIG_CLIENT dynamically.", response);
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error("App: Error fetching BLOCK_CONFIG_CLIENT:", error);
+            })
+            .getSystemConfigForClient(); // New backend function to fetch config
+    }
+    
+    /**
+     * Public function for components to request a week change.
+     * @param {string} direction - 'prev' or 'next'.
+     */
+    function requestWeekChange(direction) {
+        // Update the offset (state)
+        if (direction === 'next' && _weekOffset === 0) {
+            _weekOffset = 1; // Move to showing weeks 3 & 4
+        } else if (direction === 'prev' && _weekOffset === 1) {
+            _weekOffset = 0; // Move back to showing weeks 1 & 2
+        }
+
+        // Re-render the grids and nav buttons USING THE CACHE
+        _renderVisibleGridsFromCache(); 
+    }
+
+    /**
+     * Gets the currently active team
+     */
+    function getActiveTeam() {
+        return _activeTeam;
+    }
+
+    /**
+     * Gets user initials for a specific team
+     */
+    function getUserInitialsForTeam(teamId) {
+        if (!_userContext || !_userContext.teams) return null;
+        const teamMembership = _userContext.teams.find(t => t.teamId === teamId);
+        return teamMembership?.initials || null;
+    }
+
+    /**
+     * Gets week info for a specific grid
+     */
+    function getWeekInfo(gridId) {
+        // Extract week info from the cached schedule data
+        const weekIndex = gridId === 'week1' ? (_weekOffset * 2) : (_weekOffset * 2 + 1);
+        const weekData = _scheduleDataCache[weekIndex];
+        
+        if (weekData) {
+            return {
+                year: weekData.year,
+                weekNumber: weekData.weekNumber
+            };
+        }
+        return null;
+    }
+
+/**
+ * REPLACEMENT for the refreshCurrentTeam function.
+ * This version contains the necessary google.script.run call to fetch
+ * fresh data from the server and update the TeamInfo component.
+ */
+function refreshCurrentTeam() {
+    if (!_activeTeam || !_activeTeam.teamId) {
+        console.log("App: Cannot refresh, no active team.");
+        return;
+    }
+
+    console.log(`App: Refreshing data for team ${_activeTeam.teamId}...`);
+    
+    // --- THIS IS THE MISSING LOGIC ---
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response.success && response.team) {
+                // Update the app's internal record of the active team
+                _activeTeam = response.team;
+                
+                // Command the TeamInfo component to redraw itself with the new data
+                TeamInfo.update(_activeTeam, _userContext);
+                console.log("App: TeamInfo component updated with fresh data.");
+            } else {
+                console.error("App: Failed to refresh team data.", response);
+                // Optionally show a user-facing error message here
+            }
+        })
+        .withFailureHandler(_onDataFetchFailure) // Reuse your existing error handler
+        .handleGetTeamData(_activeTeam.teamId); // Call the backend function
+    // --- END OF MISSING LOGIC ---
+}
+
+// --- THEN ---
+// Find the 'return' statement at the VERY END of App.js.html
+// and add 'refreshCurrentTeam' to the list of public functions.
+
+// IMPORTANT: Ensure there is ONLY ONE return statement for the App module.
+// This block should be the final return statement, consolidating all public API functions.
+return {
+    init: init,
+    requestTeamSwitch: requestTeamSwitch,
+    refreshUserContext: refreshUserContext,
+    requestWeekChange: requestWeekChange,
+    getActiveTeam: getActiveTeam,
+    getUserInitialsForTeam: getUserInitialsForTeam,
+    getWeekInfo: getWeekInfo,
+    refreshCurrentTeam: refreshCurrentTeam, // Added this public function
+    showMessage: showMessage,
+    showSaveTemplateModal: showSaveTemplateModal,
+    showLoadTemplateModal: showLoadTemplateModal
+};
+
+    /**
+     * Shows a message to the user
+     */
+    function showMessage(message, type = 'info') {
+        // This should show a notification or status message
+        // For now, just log it
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        // TODO: Implement actual UI notification
+    }
+
+    /**
+     * Shows the save template modal
+     */
+    function showSaveTemplateModal() {
+        // TODO: Implement modal display
+        console.log("Show save template modal");
+    }
+
+    /**
+     * Shows the load template modal
+     */
+    function showLoadTemplateModal() {
+        // TODO: Implement modal display
+        console.log("Show load template modal");
+    }
+
+    // This is the correct and only return statement for the App module.
+    // All public functions should be listed here.
+    return {
+        init: init,
+        requestTeamSwitch: requestTeamSwitch,
+        refreshUserContext: refreshUserContext,
+        requestWeekChange: requestWeekChange,
+        getActiveTeam: getActiveTeam,
+        getUserInitialsForTeam: getUserInitialsForTeam,
+        getWeekInfo: getWeekInfo,
+        showMessage: showMessage,
+        showSaveTemplateModal: showSaveTemplateModal,
+        showLoadTemplateModal: showLoadTemplateModal,
+        refreshCurrentTeam: refreshCurrentTeam // Ensure refreshCurrentTeam is exposed
+    };
+
+})();
+</script>

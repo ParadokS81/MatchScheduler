@@ -1,0 +1,235 @@
+<!--
+ * Schedule Manager - Frontend Body Structure
+ *
+ * @version 2.1.0 (2025-06-13) - Fixed spacing and alignment issues
+ * @version 2.0.0 (2025-06-12) - Updated to static layout (non-collapsible panels)
+ * @version 1.1.0 (2025-06-07) - Updated to numbered filename for proper sorting order.
+ * @version 1.0.0 (2025-06-07) - Extracted from monolithic index.html for better organization.
+ *
+ * Purpose: Main application layout including panels, grids, and navigation
+ * Dependencies: CSS styles from 01-head-content.html
+ * Provides: DOM structure for left panel, main grids, right panel, navigation
+ * Note: No script tags - pure HTML structure only
+-->
+  <div id="initial-view-container" class="hidden flex-col items-center justify-center min-h-screen p-6">
+    </div>
+
+  <div id="main-app-layout" class="hidden flex flex-col min-h-screen">
+    <!-- Header - MINIMAL TOP MARGIN -->
+    <header class="text-center mb-1 w-full max-w-screen-2xl mx-auto px-2 sm:px-4 pt-4 pb-2">
+      <h1 class="text-4xl sm:text-5xl font-bold text-sky-400 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-check-2 mr-3 text-sky-500"><path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="m16 20 2 2 4-4"/></svg>
+        Schedule Manager
+      </h1>
+    </header>
+
+    <div class="flex flex-row flex-grow w-full max-w-screen-2xl mx-auto">
+      
+      <!-- LEFT PANEL - EQUAL TOP PADDING -->
+      <aside id="left-control-panel" class="w-64 sm:w-72 bg-slate-900 flex flex-col border-r-2 border-slate-900 flex-shrink-0">
+        <div class="overflow-y-auto pt-1 pb-2 px-2 space-y-3 flex-grow">
+            
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden">
+                <button type="button" class="flex items-center justify-between w-full p-3 text-left focus:outline-none hover:bg-slate-700/50">
+                    <div class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-circle-2 text-sky-400 mr-2 flex-shrink-0"><path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><circle cx="12" cy="12" r="10"/></svg>
+                        <div>
+                            <div id="left-panel-user-display-name" class="font-semibold text-base text-sky-300">User Name</div>
+                            <div id="left-panel-user-role" class="text-xs text-slate-400 mt-0.5">User Role</div>
+                        </div>
+                    </div>
+                </button>
+                <div class="overflow-hidden" style="max-height: none;"> 
+                    <div class="p-3 border-t border-slate-700/50 text-sm">
+                        <ul class="space-y-1.5">
+                            <li><a href="#" id="edit-profile-link" class="text-slate-300 hover:text-sky-300 block">Edit My Global Profile</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden">
+                <div id="left-panel-our-team-trigger" class="flex items-center justify-between w-full p-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-700/50 focus:outline-none cursor-pointer">
+                    <div class="flex-grow" id="left-panel-team-cards-header-container"> 
+                        <span class="text-xs text-slate-400 italic">Loading teams...</span>
+                    </div>
+                </div>
+                <div class="overflow-hidden" style="max-height: none;">
+                    <div class="p-3 border-t border-slate-700/50 space-y-3">
+                        <div id="left-panel-team-logo-area" class="my-2">
+                            <img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" alt="Current Team Logo" class="w-full h-auto rounded border border-slate-700 shadow-md">
+                        </div>
+                        <div id="left-panel-team-roster-area" class="space-y-1 text-sm">
+                            <p class="text-xs text-slate-400 italic">Select a team to see roster.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden">
+                <div class="flex items-center justify-between w-full p-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-700/50 focus:outline-none cursor-pointer">
+                    <span class="mr-auto">Grid Tools</span>
+                    <div class="flex items-center space-x-1">
+                        <button id="btn-select-all" class="text-xs bg-slate-600 hover:bg-slate-500 text-white font-semibold py-1 px-2 rounded shadow">All</button>
+                        <button id="btn-clear-selection" class="text-xs bg-slate-600 hover:bg-slate-500 text-white font-semibold py-1 px-2 rounded shadow">Clear</button>
+                        <button id="btn-add-me" class="text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded shadow">Add Me</button>
+                        <button id="btn-remove-me" class="text-xs bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-2 rounded shadow">Remove Me</button>
+                    </div>
+                </div>
+                <div class="overflow-hidden" style="max-height: none;">
+                     <div class="p-3 border-t border-slate-700/50 text-sm">
+                        <ul class="space-y-2">
+                            <li><a href="#" id="btn-save-availability-template" class="text-slate-300 hover:text-sky-300 block">Save Availability Template</a></li>
+                            <li><a href="#" id="btn-load-availability-template" class="text-slate-300 hover:text-sky-300 block">Load Availability Template</a></li>
+                            <li class="pt-1 mt-1 border-t border-slate-700/30">
+                                <label for="opponent-indicator-toggle" class="text-slate-300">Opponent Indicators:</label>
+                                <span id="opponent-indicator-toggle-placeholder" class="ml-2 text-slate-400">(Logos/Initials)</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden" id="left-panel-team-management-section" style="display: none;">
+                 <button type="button" class="flex items-center justify-between w-full p-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-700/50 focus:outline-none">
+                    <span>Team Management</span>
+                </button>
+                <div class="overflow-hidden" style="max-height: none;"> 
+                    <div class="p-3 border-t border-slate-700/50 text-sm">
+                        <ul class="space-y-1.5" id="contextual-leader-actions-list">
+                           <li class="text-xs text-slate-500 italic">Team management options appear here if you are the leader of the active team.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT - PRECISE SPACING -->
+      <div id="main-content-area-grids" class="flex-grow pt-1 pb-1"> 
+        <div id="week-navigation-bar" class="p-3 bg-slate-800/60 backdrop-blur-sm rounded-lg shadow-md border border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs sm:text-sm mb-3 mx-2 sm:mx-0">
+          <button id="prev-week-btn" class="week-nav-button bg-slate-700 hover:bg-slate-600/80 text-slate-300 py-2 px-3 rounded-md transition-colors flex items-center justify-center w-full sm:w-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-left mr-1"><path d="m15 18-6-6 6-6"/></svg>
+              Prev
+          </button>
+          <div class="flex flex-col sm:flex-row items-center gap-2 lg:gap-4 order-last sm:order-none mt-2 sm:mt-0 flex-grow justify-center">
+              <div id="current-week-display-1" class="font-semibold text-slate-100 text-sm sm:text-base py-2 px-3 bg-slate-700/50 rounded-md whitespace-nowrap text-center">Week X</div>
+              <div id="current-week-display-2" class="font-semibold text-slate-100 text-sm sm:text-base py-2 px-3 bg-slate-700/50 rounded-md whitespace-nowrap text-center mt-2 sm:mt-0">Week Y</div>
+          </div>
+          <button id="next-week-btn" class="week-nav-button bg-slate-700 hover:bg-slate-600/80 text-slate-300 py-2 px-3 rounded-md transition-colors flex items-center justify-center w-full sm:w-auto mt-2 sm:mt-0">
+              Next
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right ml-1"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+          <button id="manual-refresh-btn" class="bg-sky-600 hover:bg-sky-700 text-white py-2 px-3 rounded-md transition-colors flex items-center justify-center w-full sm:w-auto mt-2 sm:mt-0 sm:ml-2 text-xs font-semibold">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw mr-1"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+              Refresh
+          </button>
+        </div>
+        <div id="refresh-status-message" class="text-center text-xs text-slate-400 h-4 mb-1 mx-2 sm:mx-0"></div>
+
+        <!-- GRID SPACING - EXACT MATCH -->
+        <div class="space-y-5 mx-2 sm:mx-0">
+          <div class="overflow-x-auto bg-slate-800/60 backdrop-blur-sm rounded-lg shadow border border-slate-700 p-1 sm:p-1.5">
+            <table id="availability-grid-week1" class="table-fixed min-w-full w-full border-separate" style="border-spacing: 0.1rem;">
+              <thead><tr>
+                <th class="time-label p-1 w-16 sm:w-20 text-xs font-medium text-slate-400 text-center sticky left-0 bg-slate-800 z-10">Time</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Monday 19th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Tuesday 20th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Wednesday 21st</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Thursday 22nd</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Friday 23rd</th>
+                <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Saturday 24th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sunday 25th</th>
+              </tr></thead>
+              <tbody id="availability-grid-body-week1"></tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto bg-slate-800/60 backdrop-blur-sm rounded-lg shadow border border-slate-700 p-1 sm:p-1.5">
+            <table id="availability-grid-week2" class="table-fixed min-w-full w-full border-separate" style="border-spacing: 0.1rem;">
+               <thead><tr>
+                <th class="time-label p-1 w-16 sm:w-20 text-xs font-medium text-slate-400 text-center sticky left-0 bg-slate-800 z-10">Time</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Monday 26th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Tuesday 27th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Wednesday 28th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Thursday 29th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Friday 30th</th>
+                <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Saturday 31st</th>
+                <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sunday 1st</th>
+               </tr></thead>
+              <tbody id="availability-grid-body-week2"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL - EQUAL SPACING WITH GRIDS -->
+      <aside id="control-panel" class="w-64 sm:w-72 bg-slate-900 flex flex-col border-l-2 border-slate-900 flex-shrink-0">
+        <div class="overflow-y-auto pt-1 pb-2 px-2 space-y-5 flex-grow">
+            
+            <!-- FAVORITES PANEL - Fixed height aligned with Week 1 -->
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden">
+                <div class="p-2 bg-slate-700/50 border-b border-slate-600/50">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-semibold text-slate-200">Favorites</span>
+                        <button id="toggle-all-favorites" class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-300 px-2 py-0.5 rounded-sm shadow">All</button>
+                    </div>
+                </div>
+                <div class="overflow-y-auto" style="max-height: var(--week1-height, 300px);"> 
+                    <div id="favorite-opponents-list" class="p-2 space-y-1">
+                        <!-- Favorite teams will be rendered here -->
+                        <p class="text-xs text-slate-500 italic">No favorites yet.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- FILTER MATCHES PANEL - Compact design -->
+            <div class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden">
+                <div class="p-2 bg-slate-700/30">
+                  <span class="text-sm font-semibold text-slate-200">Filter Matches</span>
+                </div>
+                <div class="p-2 space-y-2 border-t border-slate-700/50">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-300">Your Team:</span>
+                    <div class="flex items-center space-x-1">
+                      <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600 text-xs">-</button>
+                      <span id="filter-own-team-players" class="font-bold text-sky-300 mx-1 text-xs">2</span>
+                      <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600 text-xs">+</button>
+                      <span class="text-xs text-slate-400 ml-1">players</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-300">Opponent:</span>
+                    <div class="flex items-center space-x-1">
+                      <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600 text-xs">-</button>
+                      <span id="filter-opponent-players" class="font-bold text-sky-300 mx-1 text-xs">2</span>
+                      <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600 text-xs">+</button>
+                      <span class="text-xs text-slate-400 ml-1">players</span>
+                    </div>
+                  </div>
+                </div>
+            </div>
+            
+            <!-- BROWSE ALL TEAMS PANEL - Fixed height aligned with Week 2 -->
+            <div id="right-panel-browse-all-teams" class="flex flex-col bg-slate-800 rounded-lg shadow-lg border border-slate-600/50 overflow-hidden flex-grow">
+                <div class="p-2 bg-slate-700/50 border-b border-slate-600/50">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-semibold text-slate-200">Browse All Teams</span>
+                    </div>
+                </div>
+                
+                <div class="p-2 border-b border-slate-700/30">
+                    <select id="division-filter-select" class="w-full p-1.5 bg-slate-600 border border-slate-500 rounded text-xs appearance-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 text-slate-200">
+                        <option value="all">All Divisions</option>
+                    </select>
+                </div>
+                
+                <div class="overflow-y-auto" style="max-height: var(--week2-height, 300px);" id="browse-all-teams-list">
+                    <!-- Teams will be rendered here -->
+                    <p class="text-xs text-slate-500 italic p-2">Loading teams...</p>
+                </div>
+            </div>
+        </div>
+      </aside>
+
+    </div>
+  </div>

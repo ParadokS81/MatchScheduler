@@ -1,0 +1,224 @@
+<script>
+/**
+ * Availability Grid Component
+ * Renders and handles interactions with the main availability grid.
+ */
+// AvailabilityGrid.js
+const AvailabilityGrid = (function() {
+    let _gridInstances = {};
+
+    // Add CSS for selection highlighting and text selection prevention
+    function _injectSelectionStyles() {
+        if (document.getElementById('grid-selection-styles')) return;
+        
+        const style = document.createElement('style');
+        style.id = 'grid-selection-styles';
+        style.textContent = `
+            .availability-cell.cell-selected {
+                background-color: rgba(56, 189, 248, 0.3) !important;
+                border-color: rgb(56, 189, 248) !important;
+                box-shadow: inset 0 0 0 1px rgb(56, 189, 248);
+            }
+            .time-label:hover, .day-header-full:hover {
+                background-color: rgba(71, 85, 105, 0.5);
+                cursor: pointer;
+            }
+            /* Prevent text selection on grid cells */
+            .availability-cell, .time-label, .day-header-full {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+            }
+            /* Prevent text selection while dragging */
+            table#availability-grid-week1,
+            table#availability-grid-week2 {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // UPDATED: _onGridClick to directly use event.shiftKey
+    function _onGridClick(event) {
+        const cell = event.target.closest('.availability-cell');
+        if (cell) {
+            event.preventDefault();
+            const gridId = event.currentTarget.id.replace('availability-grid-', '');
+            const rowIndex = parseInt(cell.parentElement.dataset.rowIndex, 10);
+            const colIndex = parseInt(cell.dataset.colIndex, 10);
+
+            if (!isNaN(rowIndex) && !isNaN(colIndex)) {
+                // Pass event.shiftKey directly to toggleCell.
+                // This is the most reliable way to check the Shift key state for a click event.
+                GridSelectionService.toggleCell(rowIndex, colIndex, gridId, event.shiftKey); 
+            }
+            return;
+        }
+
+        // Check for time row click (selects entire row)
+        const timeLabel = event.target.closest('.time-label');
+        if (timeLabel && timeLabel.parentElement.dataset.rowIndex) {
+            event.preventDefault();
+            const gridId = event.currentTarget.id.replace('availability-grid-', '');
+            const rowIndex = parseInt(timeLabel.parentElement.dataset.rowIndex, 10);
+            
+            // Pass event.shiftKey directly to selectTimeRow.
+            GridSelectionService.selectTimeRow(rowIndex, gridId, event.shiftKey);
+            return;
+        }
+    }
+
+    // UPDATED: _onHeaderClick to directly use event.shiftKey
+    function _onHeaderClick(event) {
+        const header = event.target.closest('.day-header-full');
+        if (!header) return;
+        
+        event.preventDefault();
+        const gridElement = event.currentTarget.closest('table');
+        const gridId = gridElement.id.replace('availability-grid-', '');
+        const headers = Array.from(gridElement.querySelectorAll('.day-header-full'));
+        const dayIndex = headers.indexOf(header);
+        
+        if (dayIndex >= 0) {
+            // Pass event.shiftKey directly to selectDayColumn.
+            GridSelectionService.selectDayColumn(dayIndex, gridId, event.shiftKey);
+        }
+    }
+
+    function _updateCellVisualState(cell, isSelected) {
+        if (isSelected) {
+            cell.classList.add('cell-selected');
+        } else {
+            cell.classList.remove('cell-selected');
+        }
+    }
+
+    function _refreshAllCellStates() {
+        // Update visual state of all cells based on selection service
+        Object.keys(_gridInstances).forEach(gridId => {
+            const gridElement = _gridInstances[gridId];
+            const rows = gridElement.querySelectorAll('tbody tr');
+            
+            rows.forEach((row, rowIndex) => {
+                const cells = row.querySelectorAll('.availability-cell');
+                cells.forEach((cell, colIndex) => {
+                    const isSelected = GridSelectionService.isSelected(
+                        rowIndex, 
+                        colIndex, 
+                        gridId.replace('availability-grid-', '')
+                    );
+                    _updateCellVisualState(cell, isSelected);
+                });
+            });
+        });
+    }
+
+    // Public method to refresh cell states (can be called from GridTools)
+    function refreshCellStates() {
+        _refreshAllCellStates();
+    }
+
+    function render(gridId, scheduleDataForWeek) {
+        const gridElement = _gridInstances[gridId];
+        if (!gridElement) {
+            console.error(`AvailabilityGrid.render: Grid element #${gridId} not found in instances.`);
+            return;
+        }
+
+        if (!scheduleDataForWeek || scheduleDataForWeek.error) {
+            gridElement.innerHTML = '<thead><tr><th class="p-4 text-red-400">Error loading data for this week.</th></tr></thead>';
+            return;
+        }
+
+        // Generate Header
+        let headerHtml = '<thead><tr>';
+        headerHtml += '<th class="time-label p-1 w-16 sm:w-20 text-xs font-medium text-slate-400 text-center sticky left-0 bg-slate-800 z-10">Time</th>';
+        
+        const dayHeaders = scheduleDataForWeek.dayHeaders || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        dayHeaders.forEach((header, index) => {
+            const isWeekend = index >= 5;
+            const headerTextColor = isWeekend ? 'text-amber-400' : 'text-sky-400';
+            headerHtml += `<th class="day-header-full p-1 text-xs font-medium ${headerTextColor} text-center bg-slate-700/50 rounded-t-sm cursor-pointer">${header}</th>`;
+        });
+        headerHtml += '</tr></thead>';
+
+        // Generate Body
+        let bodyHtml = `<tbody>`;
+        const timeSlots = scheduleDataForWeek.timeSlots || [];
+        
+        timeSlots.forEach((time, timeIndex) => {
+            bodyHtml += `<tr data-row-index="${timeIndex}">`;
+            bodyHtml += `<td class="time-label p-1 text-xs text-slate-400 text-center font-mono whitespace-nowrap sticky left-0 bg-slate-800 z-10 rounded-l-sm cursor-pointer hover:bg-slate-700">${time}</td>`;
+
+            const dayDataArray = (scheduleDataForWeek.availability && scheduleDataForWeek.availability[timeIndex]) 
+                ? scheduleDataForWeek.availability[timeIndex].days : [];
+
+            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+                const dayData = dayDataArray[dayIndex] || { initials: [] };
+                const isWeekend = dayIndex >= 5;
+                const cellBg = isWeekend ? 'bg-slate-700/30 hover:bg-slate-600/50' : 'bg-slate-700/10 hover:bg-slate-700/30';
+                const cellText = dayData.initials.join(', ');
+                
+                bodyHtml += `<td class="availability-cell ${cellBg} cursor-pointer rounded-sm h-9 sm:h-10 border border-slate-700/50 align-middle" data-col-index="${dayIndex}">
+                    <div class="leading-tight text-xs">${cellText}</div>
+                </td>`;
+            }
+            bodyHtml += '</tr>';
+        });
+
+        bodyHtml += '</tbody>';
+
+        // Set the complete HTML
+        gridElement.innerHTML = headerHtml + bodyHtml;
+
+        // Add header click listeners
+        const headers = gridElement.querySelectorAll('.day-header-full');
+        headers.forEach(header => {
+            header.addEventListener('click', _onHeaderClick);
+        });
+
+        // Refresh selection states after render
+        _refreshAllCellStates();
+    }
+
+    function init(gridId) {
+        const gridElement = document.getElementById(gridId);
+        if (!gridElement) {
+            console.error(`AvailabilityGrid.init: Grid element #${gridId} not found!`);
+            return;
+        }
+        
+        _gridInstances[gridId] = gridElement;
+        gridElement.addEventListener('click', _onGridClick);
+        
+        // Prevent text selection on mousedown
+        gridElement.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.availability-cell') || 
+                e.target.closest('.time-label') || 
+                e.target.closest('.day-header-full')) {
+                e.preventDefault();
+            }
+        });
+        
+        // Inject selection styles once
+        _injectSelectionStyles();
+        
+        // Subscribe to selection changes to update visual state
+        GridSelectionService.onSelectionChange(() => {
+            _refreshAllCellStates();
+        });
+        
+        console.log(`AvailabilityGrid Initialized for #${gridId}.`);
+    }
+
+    return { 
+        init, 
+        render,
+        refreshCellStates 
+    };
+})();
+</script>

@@ -1,0 +1,412 @@
+<script>
+const GridTools = (function() {
+    let _panel, _btnSelectAll, _btnClear, _btnAddMe, _btnRemoveMe;
+    let _btnSaveTemplate, _btnLoadTemplate;
+    let _isProcessing = false;
+
+    function _updateButtonStates() {
+        const hasSelection = GridSelectionService.getSelection().length > 0;
+        const hasActiveTeam = App.getActiveTeam() !== null;
+        
+        // Enable/disable buttons based on state
+        if (_btnAddMe) {
+            _btnAddMe.disabled = !hasSelection || !hasActiveTeam || _isProcessing;
+        }
+        if (_btnRemoveMe) {
+            _btnRemoveMe.disabled = !hasSelection || !hasActiveTeam || _isProcessing;
+        }
+    }
+
+    function _onSelectAllClick() {
+        GridSelectionService.selectAll();
+        _updateButtonStates();
+    }
+
+    function _onClearClick() {
+        GridSelectionService.clear();
+        _updateButtonStates();
+    }
+
+    function _onAddMeClick() {
+        _handleAvailabilityUpdate('add');
+    }
+
+    function _onRemoveMeClick() {
+        _handleAvailabilityUpdate('remove');
+    }
+
+    function _handleAvailabilityUpdate(action) {
+        const activeTeam = App.getActiveTeam();
+        if (!activeTeam || !activeTeam.teamId) {
+            return;
+        }
+
+        const selection = GridSelectionService.getSelectionByGrid();
+        const totalSelected = selection.week1.length + selection.week2.length;
+        
+        if (totalSelected === 0) {
+            return;
+        }
+
+        // Get user initials for this team
+        const userInitials = App.getUserInitialsForTeam(activeTeam.teamId);
+        if (!userInitials || userInitials === '??') {
+            return;
+        }
+
+        // Prepare payload
+        const payload = _prepareUpdatePayload(selection);
+        if (payload.length === 0) {
+            return;
+        }
+
+        // Take snapshots of current cell contents before updating
+        const cellSnapshots = _takeCellSnapshots(selection);
+
+        // Apply optimistic update immediately
+        _applyOptimisticUpdates(selection, userInitials, action);
+        
+        // Clear selection after update
+        GridSelectionService.clear();
+
+        // Disable buttons while processing
+        _isProcessing = true;
+        _updateButtonStates();
+
+        // Make the backend call
+        google.script.run
+            .withSuccessHandler((response) => {
+                _isProcessing = false;
+                _updateButtonStates();
+                
+                if (!response || !response.success) {
+                    // Rollback: restore original cell contents
+                    _rollbackCellUpdates(cellSnapshots);
+                }
+                // If success, we keep the optimistic updates
+            })
+            .withFailureHandler((error) => {
+                _isProcessing = false;
+                _updateButtonStates();
+                
+                // Rollback: restore original cell contents
+                _rollbackCellUpdates(cellSnapshots);
+            })
+            .updatePlayerAvailabilityForMultipleWeeks(activeTeam.teamId, action, payload);
+    }
+
+    function _prepareUpdatePayload(selectionByGrid) {
+        const weeklyPayloads = [];
+        
+        // Get current week info from App or from the grid displays
+        const week1Info = App.getWeekInfo('week1');
+        const week2Info = App.getWeekInfo('week2');
+        
+        if (selectionByGrid.week1.length > 0 && week1Info) {
+            weeklyPayloads.push({
+                year: week1Info.year,
+                weekNumber: week1Info.weekNumber,
+                selections: selectionByGrid.week1.map(cell => ({
+                    visualRow: cell.row,
+                    visualCol: cell.col
+                }))
+            });
+        }
+        
+        if (selectionByGrid.week2.length > 0 && week2Info) {
+            weeklyPayloads.push({
+                year: week2Info.year,
+                weekNumber: week2Info.weekNumber,
+                selections: selectionByGrid.week2.map(cell => ({
+                    visualRow: cell.row,
+                    visualCol: cell.col
+                }))
+            });
+        }
+        
+        return weeklyPayloads;
+    }
+
+    // Helper function to take snapshots of cell contents before update
+    function _takeCellSnapshots(selectionByGrid) {
+        const snapshots = [];
+        
+        Object.entries(selectionByGrid).forEach(([gridId, cells]) => {
+            cells.forEach(cell => {
+                const cellElement = _getCellElement(gridId, cell.row, cell.col);
+                const contentDiv = cellElement?.querySelector('div');
+                if (contentDiv) {
+                    snapshots.push({
+                        gridId: gridId,
+                        row: cell.row,
+                        col: cell.col,
+                        originalContent: contentDiv.textContent
+                    });
+                }
+            });
+        });
+        
+        return snapshots;
+    }
+
+    // Helper function to apply optimistic updates
+    function _applyOptimisticUpdates(selectionByGrid, userInitials, action) {
+        Object.entries(selectionByGrid).forEach(([gridId, cells]) => {
+            cells.forEach(cell => {
+                _updateCellContent(gridId, cell.row, cell.col, userInitials, action);
+            });
+        });
+    }
+
+    // Helper function to rollback cell updates on failure
+    function _rollbackCellUpdates(snapshots) {
+        snapshots.forEach(snapshot => {
+            const cellElement = _getCellElement(snapshot.gridId, snapshot.row, snapshot.col);
+            const contentDiv = cellElement?.querySelector('div');
+            if (contentDiv) {
+                contentDiv.textContent = snapshot.originalContent;
+            }
+        });
+    }
+
+    // Helper function to get cell element
+    function _getCellElement(gridId, row, col) {
+        const grid = document.getElementById(`availability-grid-${gridId}`);
+        if (!grid) return null;
+        
+        // +1 for row (tbody tr index), +2 for col (skip time label)
+        return grid.querySelector(`tbody tr:nth-child(${row + 1}) td:nth-child(${col + 2})`);
+    }
+
+    // Helper function to update cell content
+    function _updateCellContent(gridId, row, col, userInitials, action) {
+        const cellElement = _getCellElement(gridId, row, col);
+        const contentDiv = cellElement?.querySelector('div');
+        if (!contentDiv) return;
+        
+        const currentText = contentDiv.textContent.trim();
+        const currentInitials = currentText ? currentText.split(/[,\s]+/).filter(Boolean) : [];
+        
+        const ucInitials = userInitials.toUpperCase();
+        let updatedInitials = [...currentInitials];
+        
+        if (action === 'add' && !updatedInitials.includes(ucInitials)) {
+            updatedInitials.push(ucInitials);
+            updatedInitials.sort();
+        } else if (action === 'remove') {
+            const index = updatedInitials.indexOf(ucInitials);
+            if (index > -1) updatedInitials.splice(index, 1);
+        }
+        
+        contentDiv.textContent = updatedInitials.join(', ');
+    }
+
+    // New function to update week labels dynamically
+    function _updateWeekLabels() {
+        const week1Info = App.getWeekInfo('week1');
+        const week2Info = App.getWeekInfo('week2');
+        
+        if (week1Info) {
+            const week1Text = `Week ${week1Info.weekNumber}`;
+            const saveWeek1Label = _panel.querySelector('#save-template-week1-label');
+            const loadWeek1Label = _panel.querySelector('#load-template-week1-label');
+            if (saveWeek1Label) saveWeek1Label.textContent = week1Text;
+            if (loadWeek1Label) loadWeek1Label.textContent = `Load to ${week1Text}`;
+        }
+        
+        if (week2Info) {
+            const week2Text = `Week ${week2Info.weekNumber}`;
+            const saveWeek2Label = _panel.querySelector('#save-template-week2-label');
+            const loadWeek2Label = _panel.querySelector('#load-template-week2-label');
+            if (saveWeek2Label) saveWeek2Label.textContent = week2Text;
+            if (loadWeek2Label) loadWeek2Label.textContent = `Load to ${week2Text}`;
+        }
+    }
+
+    // Save template function
+    function _onSaveTemplate(weekId) {
+        const activeTeam = App.getActiveTeam();
+        if (!activeTeam || !activeTeam.teamId) {
+            _showStatus('save', 'No team selected', 'error');
+            return;
+        }
+        
+        const weekInfo = App.getWeekInfo(weekId);
+        if (!weekInfo) {
+            _showStatus('save', 'Week info not available', 'error');
+            return;
+        }
+        
+        // Collect availability data from the grid
+        const templateData = _collectWeekData(weekId);
+        
+        // Call backend to save
+        google.script.run
+            .withSuccessHandler((response) => {
+                if (response && response.success) {
+                    _showStatus('save', `Week ${weekInfo.weekNumber} saved!`, 'success');
+                } else {
+                    _showStatus('save', 'Failed to save template', 'error');
+                }
+            })
+            .withFailureHandler((error) => {
+                _showStatus('save', 'Error saving template', 'error');
+            })
+            .saveUserAvailabilityTemplate(templateData);
+    }
+
+    // Load template function
+    function _onLoadTemplate(weekIds) {
+        const activeTeam = App.getActiveTeam();
+        if (!activeTeam || !activeTeam.teamId) {
+            _showStatus('load', 'No team selected', 'error');
+            return;
+        }
+        
+        // Clear current selections first
+        GridSelectionService.clear();
+        
+        // Call backend to get template
+        google.script.run
+            .withSuccessHandler((response) => {
+                console.log('Load template response:', response); // Debug log
+                if (response && response.success && response.data && response.data.availability) {
+                    _applyTemplateToWeeks(response.data, weekIds);
+                    const weekText = weekIds.length > 1 ? 'both weeks' : `week ${weekIds[0].slice(-1)}`;
+                    _showStatus('load', `Template loaded to ${weekText}`, 'success');
+                } else if (response && response.success && !response.data) {
+                    _showStatus('load', 'No saved template found', 'info');
+                } else {
+                    _showStatus('load', response?.message || 'Failed to load template', 'error');
+                }
+            })
+            .withFailureHandler((error) => {
+                console.error('Load template error:', error);
+                _showStatus('load', 'Error loading template', 'error');
+            })
+            .loadUserAvailabilityTemplate();
+    }
+
+    // Helper to collect week data for saving
+    function _collectWeekData(weekId) {
+        const grid = document.getElementById(`availability-grid-${weekId}`);
+        if (!grid) return null;
+        
+        const activeTeam = App.getActiveTeam();
+        const userInitials = App.getUserInitialsForTeam(activeTeam.teamId);
+        if (!userInitials) return null;
+        
+        const availability = [];
+        const rows = grid.querySelectorAll('tbody tr');
+        
+        rows.forEach((row, timeIndex) => {
+            const cells = row.querySelectorAll('.availability-cell');
+            cells.forEach((cell, dayIndex) => {
+                const contentDiv = cell.querySelector('div');
+                const cellInitials = contentDiv ? contentDiv.textContent.trim().split(/[,\s]+/).filter(Boolean) : [];
+                
+                // Check if user's initials are in this cell
+                if (cellInitials.includes(userInitials.toUpperCase())) {
+                    availability.push({
+                        rowIndex: timeIndex,
+                        dayIndex: dayIndex
+                    });
+                }
+            });
+        });
+        
+        // Return in the format expected by backend
+        return {
+            teamId: activeTeam.teamId,
+            availability: availability
+        };
+    }
+
+    // Helper to apply template to selected weeks
+    function _applyTemplateToWeeks(template, weekIds) {
+        if (!template || !template.availability || !Array.isArray(template.availability)) {
+            console.error('Invalid template data:', template);
+            return;
+        }
+        
+        // Clear any existing selections first
+        GridSelectionService.clear();
+        
+        // Apply template to each requested week
+        weekIds.forEach(weekId => {
+            template.availability.forEach(slot => {
+                // The template has rowIndex and dayIndex
+                if (typeof slot.rowIndex !== 'undefined' && typeof slot.dayIndex !== 'undefined') {
+                    // Add to selection (this will trigger visual highlighting)
+                    GridSelectionService.toggleCell(slot.rowIndex, slot.dayIndex, weekId);
+                }
+            });
+        });
+    }
+
+    // Helper to show status messages
+    function _showStatus(type, message, level = 'info') {
+        const statusEl = _panel.querySelector(`#${type}-template-status`);
+        if (!statusEl) return;
+        
+        statusEl.textContent = message;
+        statusEl.className = `text-xs mt-1 h-4 ${
+            level === 'success' ? 'text-green-400' : 
+            level === 'error' ? 'text-red-400' : 
+            'text-sky-400'
+        }`;
+        
+        setTimeout(() => {
+            statusEl.textContent = '';
+        }, 3000);
+    }
+
+    // Add public method to update labels when weeks change
+    function updateWeekLabels() {
+        _updateWeekLabels();
+    }
+
+// In GridTools.js.html
+function init(panelId) {
+    _panel = document.getElementById(panelId);
+    if (!_panel) {
+        console.error(`GridTools panel #${panelId} not found!`);
+        return;
+    }
+
+    // Find all buttons
+    _btnSelectAll = _panel.querySelector('#btn-select-all');
+    _btnClear = _panel.querySelector('#btn-clear-selection');
+    _btnAddMe = _panel.querySelector('#btn-add-me');
+    _btnRemoveMe = _panel.querySelector('#btn-remove-me');
+    
+    const btnSaveWeek1 = _panel.querySelector('#btn-save-template-week1');
+    const btnSaveWeek2 = _panel.querySelector('#btn-save-template-week2');
+    const btnLoadWeek1 = _panel.querySelector('#btn-load-template-week1');
+    const btnLoadWeek2 = _panel.querySelector('#btn-load-template-week2');
+    const btnLoadBoth = _panel.querySelector('#btn-load-template-both');
+
+    // Attach event listeners
+    if (_btnSelectAll) _btnSelectAll.addEventListener('click', _onSelectAllClick);
+    if (_btnClear) _btnClear.addEventListener('click', _onClearClick);
+    if (_btnAddMe) _btnAddMe.addEventListener('click', _onAddMeClick);
+    if (_btnRemoveMe) _btnRemoveMe.addEventListener('click', _onRemoveMeClick);
+    
+    if (btnSaveWeek1) btnSaveWeek1.addEventListener('click', () => _onSaveTemplate('week1'));
+    if (btnSaveWeek2) btnSaveWeek2.addEventListener('click', () => _onSaveTemplate('week2'));
+    if (btnLoadWeek1) btnLoadWeek1.addEventListener('click', () => _onLoadTemplate(['week1']));
+    if (btnLoadWeek2) btnLoadWeek2.addEventListener('click', () => _onLoadTemplate(['week2']));
+    if (btnLoadBoth) btnLoadBoth.addEventListener('click', () => _onLoadTemplate(['week1', 'week2']));
+
+    GridSelectionService.onSelectionChange((count) => {
+        _updateButtonStates();
+    });
+
+    // The problematic call to _updateWeekLabels() has been REMOVED from this init function.
+
+    console.log("GridTools Component Initialized.");
+}
+
+    return { init, updateWeekLabels };
+})();
+</script>

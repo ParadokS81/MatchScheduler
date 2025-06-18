@@ -1,0 +1,21 @@
+<?!= include('main/App.js.html') ?>
+
+<?!= include('services/GridSelectionService.js.html') ?>
+<?!= include('services/TemplateService.js.html') ?>
+
+<?!= include('components/UserProfile.js.html') ?>
+<?!= include('components/WeekNavigation.js.html') ?>
+<?!= include('components/MatchFilters.js.html') ?>
+<?!= include('components/TeamInfo.js.html') ?>
+<?!= include('components/AvailabilityGrid.js.html') ?>
+<?!= include('components/FavoritesList.js.html') ?>
+<?!= include('components/GridTools.js.html') ?>
+<?!= include('components/BrowseTeams.js.html') ?>
+
+<script>
+  // This listener ensures that all HTML is loaded before our JavaScript tries to find elements.
+  document.addEventListener('DOMContentLoaded', function() {
+    // The main App controller is responsible for initializing all other components.
+    App.init();
+  });
+</script>

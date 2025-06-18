@@ -1,0 +1,85 @@
+<script>
+    /*
+     * Schedule Manager - Frontend Scripts Initialization
+     *
+     * @version 1.2.0 (2025-06-10) - Added weekHTMLCache for SSR
+     * @version 1.1.0 (2025-06-07) - Updated to numbered filename for proper sorting order.
+     * @version 1.0.0 (2025-06-07) - Extracted from monolithic index.html for better organization.
+     *
+     * Purpose: Client-side variable initialization and app setup
+     * Dependencies: Server-side template variables from main index.html (userContextFromServer, BLOCK_CONFIG_CLIENT, ROLES_CLIENT)
+     * Loading Order: MUST BE FIRST SCRIPT - all other scripts depend on these variables
+     * Provides: userContext, appConfig, global state variables, key event handlers
+     */
+
+    // Client-side JavaScript starts here (server injection now in main index.html)
+    console.log("[ClientScript] Script block started.");
+
+    // Correctly assign userContext, using userContextFromServer if defined, otherwise use the fallback.
+    const userContext = (typeof window.userContextFromServer !== 'undefined' && window.userContextFromServer !== null) 
+                        ? window.userContextFromServer 
+                        : { isAuthenticated: false, displayName: "Guest (Context Error/Null)", role: "guest", teams: [], config: {} };
+    
+    console.log("[ClientScript] UserContext received/fallback (detailed):", JSON.stringify(userContext, null, 2));
+    console.log("[ClientScript] userContext.isAuthenticated property is:", userContext ? userContext.isAuthenticated : "userContext is null/undefined");
+
+    // Correctly assign appConfig using the injected server constants.
+    const appConfig = { 
+        allowedDivisions: (window.BLOCK_CONFIG_CLIENT && window.BLOCK_CONFIG_CLIENT.TEAM_SETTINGS) 
+                          ? window.BLOCK_CONFIG_CLIENT.TEAM_SETTINGS.ALLOWED_DIVISIONS 
+                          : ["1", "2", "3", "Open"], // Fallback
+        defaultLogoUrl: "https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png",
+        roles: (window.ROLES_CLIENT) 
+               ? window.ROLES_CLIENT 
+               : { ADMIN: "admin", TEAM_LEADER: "team_leader", PLAYER: "player", GUEST: "guest" } // Fallback
+    };
+    console.log("[ClientScript] AppConfig initialized:", JSON.stringify(appConfig, null, 2));
+    let currentActiveTeamId = null; 
+    let clientLastLoadTimestamp = null;
+    window.allTeamsList = [];
+
+    // Week Navigation State
+    let showingFutureWeeks = false; // false = current+next, true = weeks +2 and +3
+
+    // 4-Week Cache System
+    let weekCache = {
+        teamId: null,
+        weeks: {}, // Format: '2025-23': scheduleData
+        lastLoaded: null,
+        players: null
+    };
+    // NEW: Cache for pre-rendered HTML from the server
+    let weekHTMLCache = {};
+
+    // Grid Selection State Management
+    let selectedCells = new Set(); // Store selected cells as "row,col,gridId" strings
+    let isShiftPressed = false;
+    let lastClickedCell = null; // For shift+click rectangle selection
+
+    // Declarations for tracking the year/week of the displayed grids
+    let currentGrid1Year, currentGrid1Week, currentGrid2Year, currentGrid2Week;
+    
+    // Delta Sync State Management
+    let teamTimestamps = new Map(); // Tracks last update time per team
+    let pollInterval = null; // Reference to the polling timeout for stopping it
+    let pollBackoff = 30000; // Current polling interval in ms (starts at 30s)
+    const MIN_POLL_INTERVAL = 30000; // Minimum 30 seconds between polls
+    const MAX_POLL_INTERVAL = 300000; // Maximum 5 minutes (for error backoff)
+    let isPollingActive = false; // A flag to control the polling loop
+
+    // Cache warming state
+    let favoritesWarmed = false; // Flag to ensure we only warm the cache once per session
+    let warmingInProgress = false; // Flag to prevent multiple simultaneous warming attempts
+
+    // Change notification system
+    let pendingNotifications = []; // A queue for notifications to prevent spam
+    let notificationTimeout = null; // Reference to the notification display timeout
+    
+    // Track key states
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Shift') isShiftPressed = true;
+    });
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Shift') isShiftPressed = false;
+    });
+</script>

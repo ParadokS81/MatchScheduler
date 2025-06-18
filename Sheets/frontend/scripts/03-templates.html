@@ -1,0 +1,186 @@
+<script>
+    /*
+     * Schedule Manager - Frontend Template Scripts
+     *
+     * @version 1.2.0 (2025-06-07) - Updated dependencies to reflect 4-way core split.
+     * @version 1.1.0 (2025-06-07) - Updated to numbered filename for proper sorting order.
+     * @version 1.0.0 (2025-06-07) - Extracted from monolithic index.html for better organization.
+     *
+     * Purpose: Availability template save/load functionality
+     * Dependencies: Functions from 02b-grid-selection.html (clearAllSelections, addCellToSelection) and 02d-schedule-availability.html (getUserInitialsForTeam)
+     * Provides: Template modal functions, template scanning, template application
+     * Backend Integration: saveUserAvailabilityTemplate, loadUserAvailabilityTemplate
+     * DOM Targets: save-template-modal, load-template-modal elements from 03-modals.html
+     */
+    // Template functionality
+    function showSaveTemplateModal() {
+        if (!currentActiveTeamId) {
+            showStatusMessage('No active team selected.', 'error');
+            return;
+        }
+        
+        // Update modal with current week info
+        const week1Display = document.getElementById('current-week-display-1');
+        const week2Display = document.getElementById('current-week-display-2');
+        
+        document.getElementById('save-week1-label').textContent = week1Display.textContent;
+        document.getElementById('save-week2-label').textContent = week2Display.textContent;
+        
+        // Reset form
+        document.querySelectorAll('input[name="save-week"]').forEach(radio => radio.checked = false);
+        document.getElementById('save-template-message').textContent = '';
+        
+        document.getElementById('save-template-modal').classList.remove('hidden');
+    }
+
+    function hideSaveTemplateModal() {
+        document.getElementById('save-template-modal').classList.add('hidden');
+    }
+
+    function showLoadTemplateModal() {
+        if (!currentActiveTeamId) {
+            showStatusMessage('No active team selected.', 'error');
+            return;
+        }
+        
+        // Update modal with current week info
+        const week1Display = document.getElementById('current-week-display-1');
+        const week2Display = document.getElementById('current-week-display-2');
+        
+        document.getElementById('load-week1-label').textContent = week1Display.textContent;
+        document.getElementById('load-week2-label').textContent = week2Display.textContent;
+        
+        // Reset form
+        document.getElementById('load-week1-checkbox').checked = false;
+        document.getElementById('load-week2-checkbox').checked = false;
+        document.getElementById('load-template-message').textContent = '';
+        
+        document.getElementById('load-template-modal').classList.remove('hidden');
+    }
+
+    function hideLoadTemplateModal() {
+        document.getElementById('load-template-modal').classList.add('hidden');
+    }
+
+    function handleSaveTemplate() {
+        const selectedWeek = document.querySelector('input[name="save-week"]:checked');
+        if (!selectedWeek) {
+            document.getElementById('save-template-message').innerHTML = '<span class="text-red-400">Please select a week to save from.</span>';
+            return;
+        }
+        
+        const weekValue = selectedWeek.value; // 'week1' or 'week2'
+        const userInitials = getUserInitialsForTeam(currentActiveTeamId);
+        
+        if (!userInitials) {
+            document.getElementById('save-template-message').innerHTML = '<span class="text-red-400">Your initials not found for this team.</span>';
+            return;
+        }
+        
+        // Scan selected week for user's initials
+        const templateCells = scanWeekForUserInitials(weekValue, userInitials);
+        
+        if (templateCells.length === 0) {
+            const weekLabel = weekValue === 'week1' ? 
+                document.getElementById('save-week1-label').textContent : 
+                document.getElementById('save-week2-label').textContent;
+            document.getElementById('save-template-message').innerHTML = `<span class="text-amber-400">Please add your initials to ${weekLabel} before saving template.</span>`;
+            return;
+        }
+        
+        const templateData = {
+            cells: templateCells,
+            savedFrom: weekValue === 'week1' ? 
+                document.getElementById('save-week1-label').textContent : 
+                document.getElementById('save-week2-label').textContent
+        };
+        
+        document.getElementById('save-template-message').innerHTML = '<span class="text-sky-400">Saving template...</span>';
+        
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response.success) {
+                    document.getElementById('save-template-message').innerHTML = '<span class="text-green-400">Template saved successfully!</span>';
+                    setTimeout(hideSaveTemplateModal, 1500);
+                } else {
+                    document.getElementById('save-template-message').innerHTML = `<span class="text-red-400">${response.message}</span>`;
+                }
+            })
+            .withFailureHandler(function(error) {
+                document.getElementById('save-template-message').innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+            })
+            .saveUserAvailabilityTemplate(templateData);
+    }
+
+    function handleLoadTemplate() {
+        const week1Checked = document.getElementById('load-week1-checkbox').checked;
+        const week2Checked = document.getElementById('load-week2-checkbox').checked;
+        
+        if (!week1Checked && !week2Checked) {
+            document.getElementById('load-template-message').innerHTML = '<span class="text-red-400">Please select at least one week to load template to.</span>';
+            return;
+        }
+        
+        document.getElementById('load-template-message').innerHTML = '<span class="text-sky-400">Loading template...</span>';
+        
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response.success) {
+                    applyTemplateAsSelections(response.template, week1Checked, week2Checked);
+                    document.getElementById('load-template-message').innerHTML = '<span class="text-green-400">Template loaded as selections!</span>';
+                    setTimeout(hideLoadTemplateModal, 1500);
+                } else {
+                    if (response.noTemplate) {
+                        document.getElementById('load-template-message').innerHTML = '<span class="text-amber-400">No template saved yet. Save one first!</span>';
+                    } else {
+                        document.getElementById('load-template-message').innerHTML = `<span class="text-red-400">${response.message}</span>`;
+                    }
+                }
+            })
+            .withFailureHandler(function(error) {
+                document.getElementById('load-template-message').innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+            })
+            .loadUserAvailabilityTemplate();
+    }
+
+    function scanWeekForUserInitials(weekValue, userInitials) {
+        const gridId = weekValue; // 'week1' or 'week2'
+        const grid = document.getElementById(`availability-grid-${gridId}`);
+        const cells = [];
+        
+        if (!grid) return cells;
+        
+        const rows = grid.querySelectorAll('tbody tr');
+        rows.forEach((row, timeIndex) => {
+            const dataCells = row.querySelectorAll('td.availability-cell');
+            dataCells.forEach((cell, dayIndex) => {
+                const cellText = cell.querySelector('div').textContent.trim();
+                if (cellText) {
+                    const initials = cellText.toUpperCase().split(/[,\s]+/).filter(e => e.trim());
+                    if (initials.includes(userInitials.toUpperCase())) {
+                        cells.push({ timeIndex, dayIndex });
+                    }
+                }
+            });
+        });
+        
+        return cells;
+    }
+
+    function applyTemplateAsSelections(template, applyToWeek1, applyToWeek2) {
+        // Clear existing selections first
+        clearAllSelections();
+        
+        if (applyToWeek1) {
+            template.cells.forEach(cell => {
+                addCellToSelection(cell.timeIndex, cell.dayIndex, 'week1');
+            });
+        }
+        
+        if (applyToWeek2) {
+            template.cells.forEach(cell => {
+                addCellToSelection(cell.timeIndex, cell.dayIndex, 'week2');
+            });
+        }
+    }
+  </script>

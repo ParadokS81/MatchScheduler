@@ -1,0 +1,798 @@
+<script>
+    /*
+     * Schedule Manager - Frontend Event Listeners
+     *
+     * @version 2.0.0 (2025-06-12) - Updated for static layout (non-collapsible panels)
+     * @version 1.3.0 (2025-06-08) - Added Browse All Teams event handlers (star/info clicks, roster modal)
+     * @version 1.2.0 (2025-06-07) - Updated dependencies to reflect 4-way core split.
+     * @version 1.1.0 (2025-06-07) - Updated to numbered filename for proper sorting order.
+     * @version 1.0.0 (2025-06-07) - Extracted from monolithic index.html for better organization.
+     *
+     * Purpose: DOM event binding and initialization - MUST LOAD LAST
+     * Dependencies: ALL other scripts (01-init, 02a-cache-navigation, 02b-grid-selection, 02c-team-ui, 02d-schedule-availability, 03-templates) and complete DOM from 02-body-structure.html
+     * Loading Order: CRITICAL - Must be last script as it binds to DOM elements and calls functions
+     * Provides: DOMContentLoaded handler, button clicks, modal events, static panels, browse teams interactions
+     * Assumes: All functions from cache, grid, team, schedule, and template files; all DOM elements exist
+     */
+
+    /**
+     * Calculate and set the heights of the right panels based on the actual week grid heights
+     */
+    function updatePanelHeights() {
+  console.log("[Layout] Starting panel height calculation...");
+  
+  // Calculate week grid heights
+  const week1Grid = document.getElementById('availability-grid-week1');
+  const week2Grid = document.getElementById('availability-grid-week2');
+  
+  if (!week1Grid || !week2Grid) {
+    console.error("[Layout] Grid elements not found");
+    return;
+  }
+  
+  // Get the exact container elements
+  const week1Container = week1Grid.closest('.overflow-x-auto');
+  const week2Container = week2Grid.closest('.overflow-x-auto');
+  
+  if (!week1Container || !week2Container) {
+    console.error("[Layout] Grid containers not found");
+    return;
+  }
+  
+  // Get the exact rendered heights
+  const week1Height = week1Container.getBoundingClientRect().height;
+  const week2Height = week2Container.getBoundingClientRect().height;
+  
+  console.log(`[Layout] Raw grid heights - Week 1: ${week1Height}px, Week 2: ${week2Height}px`);
+  
+  // Set CSS variables for the panel heights (exact match)
+  document.documentElement.style.setProperty('--week1-height', `${week1Height}px`);
+  document.documentElement.style.setProperty('--week2-height', `${week2Height}px`);
+  
+  // Also set the actual element heights directly for browsers that might not support CSS variables well
+  const favoritesPanel = document.querySelector('#favorite-opponents-list').parentElement;
+  const browsePanel = document.getElementById('browse-all-teams-list');
+  
+  if (favoritesPanel) {
+    // Exact match to week1 grid (minus the header)
+    const favoritesPanelHeight = week1Height - 36; // 36px for header height
+    favoritesPanel.style.height = `${favoritesPanelHeight}px`;
+    console.log(`[Layout] Set favorites panel height: ${favoritesPanelHeight}px`);
+  }
+  
+  if (browsePanel) {
+    // Exact match to week2 grid (minus headers)
+    const browsePanelHeight = week2Height - 70; // 70px for header + filter
+    browsePanel.style.height = `${browsePanelHeight}px`;
+    console.log(`[Layout] Set browse panel height: ${browsePanelHeight}px`);
+  }
+  
+  console.log("[Layout] Panel heights updated successfully");
+}
+
+// Call this from your initializeStaticLayout function and when the window loads
+window.addEventListener('load', function() {
+  // Delay to ensure all elements are rendered
+  setTimeout(updatePanelHeights, 100);
+  // Additional update after a longer delay to catch any late renders
+  setTimeout(updatePanelHeights, 500);
+});
+
+    /**
+     * Initialize the static layout with dynamic heights
+     */
+    function initializeStaticLayout() {
+      console.log("[ClientScript] Initializing static layout...");
+      
+      // Calculate and set panel heights initially
+      updatePanelHeights();
+      
+      // Re-calculate heights when window is resized
+      window.addEventListener('resize', function() {
+        updatePanelHeights();
+      });
+      
+      // Hook into loadTeamSchedule to update panel heights after rendering
+      const originalLoadTeamSchedule = window.loadTeamSchedule;
+      if (originalLoadTeamSchedule) {
+        window.loadTeamSchedule = function(...args) {
+          originalLoadTeamSchedule.apply(this, args);
+          // Schedule height update after render completes
+          setTimeout(updatePanelHeights, 500);
+        };
+      }
+
+      // Hook into setActiveTeam to update panel heights after switching teams
+      const originalSetActiveTeam = window.setActiveTeam;
+      if (originalSetActiveTeam) {
+        window.setActiveTeam = function(...args) {
+          originalSetActiveTeam.apply(this, args);
+          // Schedule height update after render completes
+          setTimeout(updatePanelHeights, 500);
+        };
+      }
+      
+      console.log("[ClientScript] Static layout initialized");
+    }
+
+    // Store original rendering functions so we can enhance them
+    const originalRenderFavoritesList = window.renderFavoritesList;
+    const originalRenderBrowseAllTeams = window.renderBrowseAllTeams;
+
+    /**
+     * Enhanced version of renderFavoritesList that adds placeholder slots
+     */
+    window.renderFavoritesList = function() {
+      // First call the original function
+      if (originalRenderFavoritesList) {
+        originalRenderFavoritesList();
+      }
+      
+      const container = document.getElementById('favorite-opponents-list');
+      if (!container) return;
+      
+      const favoriteTeamIds = new Set(userContext.favorites || []);
+      const favoriteTeams = (window.allTeamsList || []).filter(team => favoriteTeamIds.has(team.teamId));
+      
+      // Add empty slot placeholders if needed
+      const existingCards = container.querySelectorAll('.team-card');
+      const totalSlots = 5;
+      const currentCards = existingCards.length;
+      
+      // If we already have placeholder text, don't add more placeholders
+      if (container.querySelector('.text-xs.text-slate-500.italic')) {
+        return;
+      }
+      
+      // If we need to add placeholders
+      if (currentCards < totalSlots && favoriteTeams.length > 0) {
+        const emptySlots = totalSlots - currentCards;
+        
+        for (let i = 0; i < emptySlots; i++) {
+          const emptySlot = document.createElement('div');
+          emptySlot.className = 'team-card bg-slate-700/10 p-2 rounded border border-slate-600/10 border-dashed mb-1';
+          emptySlot.innerHTML = `
+            <div class="flex items-center justify-center h-6">
+              <span class="text-xs text-slate-500 italic">Empty Favorite Slot</span>
+            </div>
+          `;
+          container.appendChild(emptySlot);
+        }
+      }
+    };
+
+    /**
+     * Enhanced version of renderBrowseAllTeams for static layout
+     */
+    window.renderBrowseAllTeams = function(teams, favorites) {
+      // Call original function if it exists
+      if (originalRenderBrowseAllTeams) {
+        originalRenderBrowseAllTeams(teams, favorites);
+      } else {
+        console.log('Original renderBrowseAllTeams not found, using enhanced version only');
+        
+        const container = document.getElementById('browse-all-teams-list');
+        if (!container) {
+          console.error('Browse all teams container not found');
+          return;
+        }
+        
+        // Clear existing content
+        container.innerHTML = '';
+        
+        if (!teams || teams.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+              <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.196-2.121M9 12a4 4 0 008 0m-8 0a4 4 0 118 0m-8 0v8a2 2 0 002 2h4a2 2 0 002-2v-8"></path>
+              </svg>
+              <p class="text-slate-400">No teams available</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Group teams by division
+        const teamsByDivision = {};
+        teams.forEach(team => {
+          const division = team.division || 'Unknown';
+          if (!teamsByDivision[division]) {
+            teamsByDivision[division] = [];
+          }
+          teamsByDivision[division].push(team);
+        });
+        
+        // Sort divisions
+        const sortedDivisions = Object.keys(teamsByDivision).sort((a, b) => {
+          if (a === 'Unknown') return 1;
+          if (b === 'Unknown') return -1;
+          return parseInt(a) - parseInt(b);
+        });
+        
+        // Collect all team IDs for batch logo loading
+        const allTeamIds = [];
+        
+        // Render each division group
+        sortedDivisions.forEach(division => {
+          // Division header
+          const divisionHeader = document.createElement('div');
+          divisionHeader.className = 'text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 py-1 border-b border-slate-600/30 bg-slate-700/20';
+          divisionHeader.textContent = division === 'Unknown' ? 'Other Teams' : `Division ${division}`;
+          container.appendChild(divisionHeader);
+          
+          // Teams in this division
+          teamsByDivision[division].forEach(team => {
+            const isFavorite = favorites.includes(team.teamId);
+            allTeamIds.push(team.teamId);
+            
+            const teamCard = document.createElement('div');
+            teamCard.className = 'team-card bg-slate-700/20 hover:bg-slate-700/40 p-2 transition-colors cursor-pointer border-b border-slate-600/20';
+            teamCard.dataset.teamId = team.teamId;
+            
+            const defaultLogoUrl = appConfig.defaultLogoUrl || 'https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png';
+            
+            teamCard.innerHTML = `
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2 flex-1 min-w-0">
+                  <img src="${defaultLogoUrl}" 
+                      data-team-logo="${team.teamId}"
+                      alt="${team.teamName} logo" 
+                      class="w-6 h-6 rounded-sm object-cover bg-slate-600">
+                  <div class="flex-1 min-w-0">
+                    <h5 class="team-name text-xs font-medium text-slate-200 truncate">${team.teamName}</h5>
+                    <div class="text-xs text-slate-400">
+                      <span class="text-xs">Leader: ${team.leaderName || 'Loading...'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-1 flex-shrink-0">
+                  <button class="favorite-star-btn p-1 hover:bg-slate-600/50 rounded transition-colors"
+                        data-team-id="${team.teamId}" 
+                        data-is-favorite="${isFavorite}">
+                    <svg class="w-4 h-4 lucide-star ${isFavorite ? 'text-amber-400' : 'text-slate-500'}" 
+                         fill="${isFavorite ? 'currentColor' : 'none'}" 
+                         stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>
+                    </svg>
+                  </button>
+                  <button class="team-info-btn p-1 hover:bg-slate-600/50 rounded transition-colors"
+                        data-team-id="${team.teamId}">
+                    <svg class="w-4 h-4 text-slate-400 hover:text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            `;
+            
+            container.appendChild(teamCard);
+          });
+        });
+        
+        // Batch load all logos after rendering
+        if (allTeamIds.length > 0 && typeof batchLoadLogos === 'function') {
+          batchLoadLogos(allTeamIds);
+        }
+      }
+      
+      // After the normal rendering, apply our height adjustment
+      setTimeout(updatePanelHeights, 100);
+    };
+
+    document.addEventListener('DOMContentLoaded', () => { 
+        console.log("[ClientScript] DOMContentLoaded. Initializing page...");
+        if (typeof userContext !== 'undefined' && userContext !== null) { // Ensure userContext is defined before proceeding
+             handleInitialView();
+             renderFavoritesList();
+        } else {
+            console.error("[ClientScript] userContext is undefined at DOMContentLoaded. Page may not render correctly.");
+            // Optionally display a generic error message in 'initial-view-container'
+             document.getElementById('initial-view-container').innerHTML = '<p class="text-red-400">Error: User context not loaded. Please try refreshing.</p>';
+             document.getElementById('initial-view-container').classList.remove('hidden');
+        }
+        
+        // Initialize navigation buttons
+        updateNavigationButtons();
+        
+        const manualRefreshButton = document.getElementById('manual-refresh-btn');
+        if(manualRefreshButton) manualRefreshButton.addEventListener('click', handleManualRefresh);
+
+        // Week navigation button handlers
+        const prevWeekBtn = document.getElementById('prev-week-btn');
+        if(prevWeekBtn) prevWeekBtn.addEventListener('click', handlePrevWeek);
+        
+        const nextWeekBtn = document.getElementById('next-week-btn');
+        if(nextWeekBtn) nextWeekBtn.addEventListener('click', handleNextWeek);
+
+        // Grid Tools button handlers
+        const btnSelectAll = document.getElementById('btn-select-all');
+        if(btnSelectAll) btnSelectAll.addEventListener('click', selectAllCells);
+        
+        const btnClearSelection = document.getElementById('btn-clear-selection');
+        if(btnClearSelection) btnClearSelection.addEventListener('click', clearAllSelections);
+        
+        const btnAddMe = document.getElementById('btn-add-me');
+        if(btnAddMe) btnAddMe.addEventListener('click', function() { handleAvailabilityUpdate('add'); });
+        
+        const btnRemoveMe = document.getElementById('btn-remove-me');
+        if(btnRemoveMe) btnRemoveMe.addEventListener('click', function() { handleAvailabilityUpdate('remove'); });
+
+        // Template button handlers
+        const btnSaveTemplate = document.getElementById('btn-save-availability-template');
+        if(btnSaveTemplate) btnSaveTemplate.addEventListener('click', function(e) {
+            e.preventDefault();
+            showSaveTemplateModal();
+        });
+
+        const btnLoadTemplate = document.getElementById('btn-load-availability-template');
+        if(btnLoadTemplate) btnLoadTemplate.addEventListener('click', function(e) {
+            e.preventDefault();
+            showLoadTemplateModal();
+        });
+
+        // Modal event listeners
+        const saveTemplateConfirm = document.getElementById('save-template-confirm');
+        if(saveTemplateConfirm) saveTemplateConfirm.addEventListener('click', handleSaveTemplate);
+
+        const saveTemplateCancel = document.getElementById('save-template-cancel');
+        if(saveTemplateCancel) saveTemplateCancel.addEventListener('click', hideSaveTemplateModal);
+
+        const loadTemplateConfirm = document.getElementById('load-template-confirm');
+        if(loadTemplateConfirm) loadTemplateConfirm.addEventListener('click', handleLoadTemplate);
+
+        const loadTemplateCancel = document.getElementById('load-template-cancel');
+        if(loadTemplateCancel) loadTemplateCancel.addEventListener('click', hideLoadTemplateModal);
+
+        // Team Roster Modal handlers
+        const teamRosterClose = document.getElementById('team-roster-close');
+        if(teamRosterClose) teamRosterClose.addEventListener('click', hideTeamRosterModal);
+
+        // Browse All Teams delegated event handlers
+        document.addEventListener('click', function(event) {
+            // Handle favorite star clicks
+            const starBtn = event.target.closest('.favorite-star-btn');
+            if (starBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                handleFavoriteToggle(starBtn);
+                return;
+            }
+            
+            // Handle team info clicks
+            const infoBtn = event.target.closest('.team-info-btn');
+            if (infoBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                handleTeamInfoClick(infoBtn);
+                return;
+            }
+        });
+
+        // Re-delegate team card clicks if they are dynamically added later (e.g. for right panel)
+        // For now, this only catches statically rendered ones or those made by populateTeamCardsAndActiveTeam
+        document.addEventListener('click', function(event) {
+            const card = event.target.closest('.team-card');
+            if (!card) return;
+
+            // Skip if clicking on a star or info button
+            if (event.target.closest('.favorite-star-btn') || event.target.closest('.team-info-btn')) {
+                return;
+            }
+            
+            // Skip if clicking on a left panel team card
+            if(event.target.closest('.left-panel-team-card')) {
+                return;
+            }
+
+            // For right panel team cards
+            card.classList.toggle('selected');
+            const teamNameSpan = card.querySelector('.team-name');
+            if (teamNameSpan) {
+                if (card.classList.contains('selected')) {
+                    teamNameSpan.classList.remove('text-slate-200');
+                    teamNameSpan.classList.add('text-sky-100');
+                } else {
+                    teamNameSpan.classList.remove('text-sky-100');
+                    teamNameSpan.classList.add('text-slate-200');
+                }
+            }
+        });
+        
+        // Initialize the static layout
+        initializeStaticLayout();
+        
+        console.log("[ClientScript] DOMContentLoaded event listeners attached.");
+    });
+
+/**
+     * Handle toggling favorite status for a team using a fully optimistic approach.
+     * Instantly updates the UI and then syncs with the server.
+     */
+    function handleFavoriteToggle(starBtn) {
+        const teamId = starBtn.dataset.teamId;
+        if (!teamId) {
+            console.error('Missing teamId for favorite toggle');
+            return;
+        }
+
+        const isCurrentlyFavorite = starBtn.dataset.isFavorite === 'true';
+        const newFavoriteStatus = !isCurrentlyFavorite;
+
+        // --- 1. OPTIMISTIC CLIENT-SIDE UPDATES ---
+
+        // a) Update local data array first
+        const favoriteSet = new Set(userContext.favorites || []);
+        if (newFavoriteStatus) {
+            favoriteSet.add(teamId);
+        } else {
+            favoriteSet.delete(teamId);
+        }
+        const newFavoritesArray = Array.from(favoriteSet);
+        const originalFavoritesArray = userContext.favorites; // Keep for error recovery
+        userContext.favorites = newFavoritesArray;
+
+        // b) Instantly re-render both lists to keep them in sync
+        renderFavoritesList();
+        // Also re-render the main browse list to update its star icon state
+        renderBrowseAllTeams(window.allTeamsList, userContext.favorites);
+
+
+        // --- 2. BACKGROUND SERVER SYNC ---
+
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response && response.success) {
+                    console.log('Server confirmed favorite toggle:', response.favorites);
+                    // Silently re-sync with the server's definitive list, though it should match.
+                    userContext.favorites = response.favorites || [];
+                } else {
+                    // Handle cases where the server returns success:false
+                    console.error('Failed to toggle favorite on server:', response);
+                    // Revert UI to original state
+                    userContext.favorites = originalFavoritesArray;
+                    renderFavoritesList();
+                    renderBrowseAllTeams(window.allTeamsList, userContext.favorites);
+                    showStatusMessage('Failed to update favorite', 'error');
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error('Error toggling favorite:', error);
+                
+                // --- 3. ERROR RECOVERY ---
+                // Revert UI changes if the server call fails
+                userContext.favorites = originalFavoritesArray;
+                renderFavoritesList();
+                renderBrowseAllTeams(window.allTeamsList, userContext.favorites);
+                showStatusMessage('Error saving favorite. Reverting.', 'error');
+            })
+            .toggleFavoriteTeam(teamId, newFavoriteStatus);
+    }
+
+    /**
+     * Update star icon appearance
+     */
+    function updateStarAppearance(starIcon, isFavorite) {
+        if (isFavorite) {
+            starIcon.setAttribute('fill', 'currentColor');
+            starIcon.classList.remove('text-slate-500');
+            starIcon.classList.add('text-amber-400');
+        } else {
+            starIcon.setAttribute('fill', 'none');
+            starIcon.classList.remove('text-amber-400');
+            starIcon.classList.add('text-slate-500');
+        }
+    }
+
+    /**
+     * Handle team info button clicks
+     */
+    function handleTeamInfoClick(infoBtn) {
+        const teamId = infoBtn.dataset.teamId;
+        
+        if (!teamId) {
+            console.error('Missing teamId for info click');
+            return;
+        }
+        
+        showTeamRosterModal(teamId);
+    }
+
+    /**
+     * Show team roster modal
+     */
+    function showTeamRosterModal(teamId) {
+        const modal = document.getElementById('team-roster-modal');
+        const loading = document.getElementById('team-roster-loading');
+        const content = document.getElementById('team-roster-content');
+        const error = document.getElementById('team-roster-error');
+        
+        if (!modal) {
+            console.error('Team roster modal not found');
+            return;
+        }
+        
+        // Show modal in loading state
+        modal.classList.remove('hidden');
+        loading.classList.remove('hidden');
+        content.classList.add('hidden');
+        error.classList.add('hidden');
+        
+        // Fetch roster data
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response && response.success && response.roster) {
+                    populateTeamRosterModal(response.roster, teamId);
+                    loading.classList.add('hidden');
+                    content.classList.remove('hidden');
+                } else {
+                    showTeamRosterError(response?.message || 'Failed to load team roster');
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error('Error loading team roster:', error);
+                showTeamRosterError(`Error: ${error.message || 'Failed to load team roster'}`);
+            })
+            .getRosterForTeam(teamId);
+    }
+
+    /**
+     * Populate team roster modal with data
+     */
+    function populateTeamRosterModal(roster, teamId) {
+        // Find team info from the cached teams list or from team cards
+        let teamInfo = null;
+        const teamCards = document.querySelectorAll('.team-card');
+        teamCards.forEach(card => {
+            if (card.dataset.teamId === teamId) {
+                const img = card.querySelector('img');
+                const nameEl = card.querySelector('.team-name');
+                const divisionEl = card.querySelector('.text-xs');
+                
+                teamInfo = {
+                    teamName: nameEl ? nameEl.textContent : 'Unknown Team',
+                    logoUrl: img ? img.src : appConfig.defaultLogoUrl,
+                    division: divisionEl ? divisionEl.textContent.split(' ')[1] : 'Unknown' // Extract division from "Div X"
+                };
+            }
+        });
+        
+        // Fallback if team info not found
+        if (!teamInfo) {
+            teamInfo = {
+                teamName: 'Team Details',
+                logoUrl: appConfig.defaultLogoUrl,
+                division: 'Unknown'
+            };
+        }
+        
+        // Update header
+        const logoEl = document.getElementById('team-roster-logo');
+        const nameEl = document.getElementById('team-roster-name');
+        const divisionEl = document.getElementById('team-roster-division');
+        
+        if (logoEl) logoEl.src = teamInfo.logoUrl;
+        if (nameEl) nameEl.textContent = teamInfo.teamName;
+        if (divisionEl) divisionEl.textContent = `Division ${teamInfo.division}`;
+        
+        // Find team leader
+        const leader = roster.find(player => player.role === 'team_leader');
+        const otherMembers = roster.filter(player => player.role !== 'team_leader');
+        
+        // Update leader section
+        const leaderNameEl = document.getElementById('team-roster-leader-name');
+        const leaderInitialsEl = document.getElementById('team-roster-leader-initials');
+        const leaderContactEl = document.getElementById('team-roster-leader-contact');
+        
+        if (leader) {
+            if (leaderNameEl) leaderNameEl.textContent = leader.displayName;
+            if (leaderInitialsEl) leaderInitialsEl.textContent = leader.initials;
+            if (leaderContactEl) {
+                leaderContactEl.innerHTML = '';
+                if (leader.googleEmail) {
+                    const emailDiv = document.createElement('div');
+                    emailDiv.innerHTML = `<span class="text-slate-400">Email:</span> ${leader.googleEmail}`;
+                    leaderContactEl.appendChild(emailDiv);
+                }
+                if (leader.discordUsername) {
+                    const discordDiv = document.createElement('div');
+                    discordDiv.innerHTML = `<span class="text-slate-400">Discord:</span> ${leader.discordUsername}`;
+                    leaderContactEl.appendChild(discordDiv);
+                }
+            }
+        }
+        
+        // Update members section
+        const membersEl = document.getElementById('team-roster-members');
+        if (membersEl) {
+            membersEl.innerHTML = '';
+            roster.forEach(player => {
+                const memberDiv = document.createElement('div');
+                memberDiv.className = 'flex items-center justify-between p-3 bg-slate-700/20 rounded border border-slate-600/30';
+                
+                const isLeader = player.role === 'team_leader';
+                memberDiv.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="text-slate-200 font-medium">${player.displayName}</div>
+                        ${isLeader ? '<div class="text-xs bg-sky-600 text-white px-2 py-1 rounded">LEADER</div>' : ''}
+                    </div>
+                    <div class="text-sky-400 font-mono">${player.initials}</div>
+                `;
+                
+                membersEl.appendChild(memberDiv);
+            });
+        }
+    }
+
+    /**
+     * Show error in team roster modal
+     */
+    function showTeamRosterError(message) {
+        const loading = document.getElementById('team-roster-loading');
+        const content = document.getElementById('team-roster-content');
+        const error = document.getElementById('team-roster-error');
+        const errorMessage = document.getElementById('team-roster-error-message');
+        
+        loading.classList.add('hidden');
+        content.classList.add('hidden');
+        error.classList.remove('hidden');
+        
+        if (errorMessage) {
+            errorMessage.textContent = message;
+        }
+    }
+
+    /**
+     * Hide team roster modal
+     */
+    function hideTeamRosterModal() {
+        const modal = document.getElementById('team-roster-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // === DELTA SYNC AND POLLING SYSTEM ===
+
+    /**
+     * Starts the update polling system.
+     */
+    function startUpdatePolling() {
+        if (isPollingActive) return;
+        isPollingActive = true;
+        pollBackoff = MIN_POLL_INTERVAL;
+        console.log('[Delta Sync] Starting update polling.');
+        setTimeout(pollForUpdates, 5000); // Initial poll after 5s
+    }
+
+    /**
+     * Stops the update polling system.
+     */
+    function stopUpdatePolling() {
+        if (!isPollingActive) return;
+        isPollingActive = false;
+        if (pollInterval) clearTimeout(pollInterval);
+        pollInterval = null;
+        console.log('[Delta Sync] Stopped update polling.');
+    }
+
+    /**
+     * Main polling function that calls the backend to check for changes.
+     */
+    function pollForUpdates() {
+        if (!isPollingActive || !currentActiveTeamId) return;
+        
+        const lastTimestamp = teamTimestamps.get(currentActiveTeamId) || 0;
+        google.script.run
+            .withSuccessHandler(handleScheduleUpdate)
+            .withFailureHandler(handlePollError)
+            .checkForScheduleUpdates(currentActiveTeamId, lastTimestamp);
+    }
+
+    /**
+     * Schedules the next poll with the current backoff delay.
+     */
+    function scheduleNextPoll() {
+        if (!isPollingActive) return;
+        if (pollInterval) clearTimeout(pollInterval);
+        pollInterval = setTimeout(pollForUpdates, pollBackoff);
+    }
+
+    /**
+     * Handles errors during polling by increasing the poll interval (exponential backoff).
+     */
+    function handlePollError(error) {
+        console.error('[Delta Sync] Poll error:', error);
+        pollBackoff = Math.min(pollBackoff * 2, MAX_POLL_INTERVAL); // Double delay up to max
+        console.log('[Delta Sync] Backing off to', pollBackoff / 1000, 'seconds.');
+        scheduleNextPoll();
+    }
+
+    /**
+     * Main handler for the delta API response. Routes changes to the correct UI functions.
+     */
+    function handleScheduleUpdate(response) {
+        if (!response || !response.success || !response.hasChanges) {
+            scheduleNextPoll(); // No changes, continue polling normally
+            return;
+        }
+        
+        console.log('[Delta Sync] Changes detected:', response.changeType);
+        if (response.serverTimestamp) teamTimestamps.set(currentActiveTeamId, response.serverTimestamp);
+
+        if (response.isOwnChange && response.changeType === 'availability') {
+            scheduleNextPoll(); // Skip refresh for our own availability changes
+            return;
+        }
+
+        // Apply changes based on type
+        switch (response.changeType) {
+            case 'availability':
+                if (response.changes) applyAvailabilityChanges(response.changes);
+                showChangeNotification('Schedule updated by ' + getShortName(response.changedBy));
+                break;
+            case 'roster':
+            case 'team_settings':
+            case 'player_profile':
+                showChangeNotification(formatChangeMessage(response.changeType, response, response.changedBy));
+                setTimeout(() => { if (currentActiveTeamId) loadTeamSchedule(currentActiveTeamId, true); }, 1000);
+                break;
+            default:
+                console.warn('[Delta Sync] Unknown change type:', response.changeType);
+                break;
+        }
+
+        pollBackoff = MIN_POLL_INTERVAL; // Reset backoff after a successful update
+        scheduleNextPoll();
+    }
+
+    /**
+     * Displays a short notification message to the user.
+     */
+    function showChangeNotification(message) {
+        let notificationEl = document.getElementById('delta-notification');
+        if (!notificationEl) {
+            notificationEl = document.createElement('div');
+            notificationEl.id = 'delta-notification';
+            notificationEl.className = 'delta-notification';
+            document.body.appendChild(notificationEl);
+        }
+        notificationEl.textContent = message;
+        notificationEl.classList.add('show');
+        setTimeout(() => { notificationEl.classList.remove('show'); }, 3000);
+    }
+
+    // Helper to get a short name from an email for notifications
+    function getShortName(email) {
+        if (!email || typeof email !== 'string') return 'Someone';
+        const namePart = email.split('@')[0];
+        return namePart.charAt(0).toUpperCase() + namePart.slice(1).split(/[._-]/)[0];
+    }
+
+    // Helper to format change messages based on type
+    function formatChangeMessage(changeType, response, changedBy) {
+        const shortName = getShortName(changedBy);
+        switch(changeType) {
+            case 'roster':
+                return `Team roster updated by ${shortName}`;
+            case 'team_settings':
+                return `Team settings changed by ${shortName}`;
+            case 'player_profile':
+                return `Player profile updated by ${shortName}`;
+            default:
+                return `Team data updated by ${shortName}`;
+        }
+    }
+
+    // Event listeners to pause polling when the tab is not active
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopUpdatePolling();
+        } else {
+            if (currentActiveTeamId) startUpdatePolling();
+        }
+    });
+
+    window.addEventListener('beforeunload', stopUpdatePolling);
+</script>

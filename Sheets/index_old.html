@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<?!= include('frontend/01-head-content') ?>
+<body class="bg-slate-900 text-slate-300">
+  <?!= include('frontend/02-body-structure') ?>
+  <?!= include('frontend/03-modals') ?>
+  
+  <script>
+    // Server variables injected by template - MUST BE IN MAIN FILE
+    window.userContextFromServer = <?!= typeof userContextFromServer !== 'undefined' ? JSON.stringify(userContextFromServer) : 'null' ?>;
+    window.BLOCK_CONFIG_CLIENT = <?!= typeof BLOCK_CONFIG !== 'undefined' ? JSON.stringify(BLOCK_CONFIG) : 'null' ?>;
+    window.ROLES_CLIENT = <?!= typeof ROLES !== 'undefined' ? JSON.stringify(ROLES) : 'null' ?>;
+  </script>
+  
+  <?!= include('frontend/scripts/01-init') ?>
+  <?!= include('frontend/scripts/02a-cache-navigation') ?>
+  <?!= include('frontend/scripts/02b-grid-selection') ?>
+  <?!= include('frontend/scripts/02c-team-ui') ?>
+  <?!= include('frontend/scripts/02d-schedule-availability') ?>
+  <?!= include('frontend/scripts/03-templates') ?>
+  <?!= include('frontend/scripts/04-events') ?>
+</body>
+</html>

@@ -1,0 +1,561 @@
+<script>
+/**
+ * Team Info Component (grid-cell-middle-left)
+ * Displays active team, logo, roster, and team management drawer.
+ * * @version 2.0.0 (2025-06-14) - Added team management drawer functionality
+ * @version 1.0.0 - Initial basic component
+ */
+const TeamInfo = (function() {
+  let _panel, _teamSelector, _logo, _roster, _managementToggle, _drawer, _arrow;
+  let _currentTeamData = null;
+  let _userContext = null;
+  let _isDrawerOpen = false;
+
+  // Private methods
+  function _onManagementToggle(event) {
+    event.preventDefault();
+    _isDrawerOpen = !_isDrawerOpen;
+    _toggleDrawer();
+    
+    // Load management data immediately when opening the drawer
+    if (_isDrawerOpen && _currentTeamData) {
+      _loadManagementData();
+    }
+  }
+
+function _toggleDrawer() {
+  if (_isDrawerOpen) {
+    // Open to top-14
+    _drawer.classList.remove('translate-y-[calc(100%-40px)]');
+    _drawer.classList.add('translate-y-0');
+  } else {
+    // Close to bottom+40px
+    _drawer.classList.remove('translate-y-0');
+    _drawer.classList.add('translate-y-[calc(100%-40px)]');
+  }
+}
+
+  function _loadManagementData() {
+    if (!_currentTeamData) return;
+
+    // Update logo input
+    const logoInput = _panel.querySelector('#logo-url-input');
+    if (logoInput) {
+      logoInput.value = _currentTeamData.logoUrl || '';
+    }
+
+    // Update max players select
+    const maxPlayersSelect = _panel.querySelector('#max-players-select');
+    if (maxPlayersSelect) {
+      maxPlayersSelect.value = _currentTeamData.maxPlayers || 4;
+    }
+
+    // Update join code display
+    const joinCodeSpan = _panel.querySelector('#current-join-code');
+    if (joinCodeSpan) {
+      joinCodeSpan.textContent = _currentTeamData.joinCode || 'Loading...';
+    }
+
+    // Update roster management list
+    _updateManagementRoster();
+
+    // Show/hide sections based on user role
+    _updateUIBasedOnRole();
+  }
+
+  function _updateManagementRoster() {
+    const rosterList = _panel.querySelector('#management-roster-list');
+    if (!rosterList || !_currentTeamData || !_currentTeamData.roster) return;
+
+    rosterList.innerHTML = '';
+    
+    // Check if the current user is a leader of the active team
+    const currentUserIsLeader = _userContext && _userContext.teams && _userContext.teams.some(team =>
+        team.teamId === _currentTeamData.teamId && team.role === 'team_leader'
+    );
+
+    _currentTeamData.roster.forEach(player => {
+        const isPlayerTheLeader = player.role === 'team_leader';
+        const isPlayerTheCurrentUser = _userContext && player.email === _userContext.userEmail;
+        
+        const playerDiv = document.createElement('div');
+        playerDiv.className = 'flex items-center justify-between py-1 px-2 bg-slate-700/50 rounded';
+        
+        let managementButtonsHTML = '';
+        // Show buttons only if the viewing user is the leader, AND the target player is not the leader and not themselves.
+        if (currentUserIsLeader && !isPlayerTheLeader && !isPlayerTheCurrentUser) {
+            managementButtonsHTML = `
+              <button class="transfer-leader-btn p-1 hover:bg-slate-600 rounded" data-player-email="${player.email}" title="Transfer Leadership">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-400 hover:text-amber-300">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>
+                </svg>
+              </button>
+              <button class="kick-player-btn p-1 hover:bg-slate-600 rounded" data-player-email="${player.email}" title="Kick Player">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-red-400 hover:text-red-300">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            `;
+        }
+
+        playerDiv.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-200">${player.displayName}</span>
+            <span class="text-xs text-sky-400 font-mono">${player.initials}</span>
+            ${isPlayerTheLeader ? `
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" class="text-amber-400">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>
+              </svg>
+            ` : ''}
+          </div>
+          <div class="flex items-center gap-1">
+            ${managementButtonsHTML}
+          </div>
+        `;
+        
+        rosterList.appendChild(playerDiv);
+    });
+
+    _attachRosterManagementListeners();
+  }
+
+  function _updateUIBasedOnRole() {
+    if (!_userContext) return;
+
+    const isLeader = _userContext.teams && _userContext.teams.some(team => 
+      team.teamId === _currentTeamData.teamId && team.role === 'team_leader'
+    );
+
+    // Show/hide management sections based on role
+    const logoSection = _panel.querySelector('#logo-management-section');
+    const settingsSection = _panel.querySelector('#team-settings-section');
+    const rosterSection = _panel.querySelector('#roster-management-section');
+    const leaveSection = _panel.querySelector('#leave-team-section');
+
+    if (isLeader) {
+      if (logoSection) logoSection.style.display = 'block';
+      if (settingsSection) settingsSection.style.display = 'block';
+      if (rosterSection) rosterSection.style.display = 'block';
+      if (leaveSection) leaveSection.style.display = 'none';
+    } else {
+      if (logoSection) logoSection.style.display = 'none';
+      if (settingsSection) settingsSection.style.display = 'none';
+      if (rosterSection) rosterSection.style.display = 'none';
+      if (leaveSection) leaveSection.style.display = 'block';
+    }
+  }
+
+/**
+ * This is the complete and corrected function for attaching event listeners
+ * to the team management buttons within the drawer. It includes the confirmation
+ * modal for both "Transfer Leadership" and "Kick Player" actions.
+ */
+function _attachRosterManagementListeners() {
+    // Transfer leader buttons
+    const transferBtns = _panel.querySelectorAll('.transfer-leader-btn');
+    transferBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const playerEmail = btn.getAttribute('data-player-email');
+        _showConfirmationModal(
+          'Transfer Leadership',
+          `Are you sure you want to transfer team leadership to this player? You will become a regular team member.`,
+          () => _transferLeadership(playerEmail)
+        );
+      });
+    });
+
+    // Kick player buttons
+    const kickBtns = _panel.querySelectorAll('.kick-player-btn');
+    kickBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const playerEmail = btn.getAttribute('data-player-email');
+        // Find the player's name from the same roster item for a better confirmation message.
+        const playerName = btn.closest('.flex.items-center.justify-between').querySelector('.text-xs.text-slate-200').textContent;
+        
+        // --- This is the corrected logic with the confirmation modal ---
+        _showConfirmationModal(
+          'Kick Player',
+          `Are you sure you want to kick ${playerName} from the team? This will regenerate the team's join code.`,
+          () => _kickPlayer(playerEmail) // Only calls _kickPlayer if the user confirms.
+        );
+      });
+    });
+}
+
+  /**
+ * REPLACEMENT for _showConfirmationModal
+ * This version correctly finds the modal elements, sets the content,
+ * and properly handles the confirm/cancel actions.
+ */
+function _showConfirmationModal(title, message, onConfirm) {
+    const modal = document.getElementById('team-management-confirm-modal');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const messageEl = document.getElementById('confirm-modal-message');
+    const confirmBtn = document.getElementById('confirm-modal-confirm');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+
+    if (!modal || !titleEl || !messageEl || !confirmBtn || !cancelBtn) {
+        console.error("Confirmation modal elements not found in the DOM.");
+        // As a fallback, run the action directly if the modal is broken.
+        // This is not ideal, but prevents the button from doing nothing.
+        if(confirm("MODAL FAILED TO LOAD. " + message + "\n\nPress OK to confirm this action.")){
+            onConfirm();
+        }
+        return;
+    }
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+
+    // This is a common and reliable way to handle event listeners on modals.
+    // It removes any old listeners and adds fresh ones for this specific action.
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+    newConfirmBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      onConfirm();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    }, { once: true }); // Use {once: true} for the cancel button listener
+
+    // Finally, make the modal visible.
+    modal.classList.remove('hidden');
+}
+
+  function _showErrorModal(message, details) {
+    const modal = document.getElementById('team-management-error-modal');
+    const messageEl = document.getElementById('error-modal-message');
+    const detailsEl = document.getElementById('error-modal-details');
+    const closeBtn = document.getElementById('error-modal-close');
+    const copyBtn = document.getElementById('copy-error-details');
+
+    if (!modal) {
+      console.error('Error modal not found:', message, details);
+      return;
+    }
+
+    messageEl.textContent = message;
+    detailsEl.textContent = details;
+    modal.classList.remove('hidden');
+
+    closeBtn.onclick = () => modal.classList.add('hidden');
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(details).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => copyBtn.textContent = 'Copy Details', 2000);
+      });
+    };
+  }
+
+  // Team management actions
+  function _transferLeadership(newLeaderEmail) {
+    if (!_currentTeamData) return;
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        if (result.success) {
+          // Refresh team data and UI
+          _refreshTeamData();
+        } else {
+          _showErrorModal('Failed to transfer leadership', result.message || 'Unknown error');
+        }
+      })
+      .withFailureHandler((error) => {
+        _showErrorModal('Failed to transfer leadership', error.toString());
+      })
+      .adminSetTeamLeader(_currentTeamData.teamId, newLeaderEmail);
+  }
+
+
+
+/**
+ * FINAL REPLACEMENT for _kickPlayer
+ * This version calls the correct App.refreshUserContext() function
+ * to perform a seamless UI update without a disruptive page reload.
+ */
+function _kickPlayer(playerEmail) {
+    if (!_currentTeamData) return;
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        if (result.success) {
+          // --- THIS IS THE CORRECT LOGIC ---
+          // On success, tell the main App to do a full refresh of all data.
+          // This will fetch the new roster and the new schedule (without the
+          // kicked player's initials) and re-render everything correctly.
+          if (typeof App.refreshUserContext === 'function') {
+            App.refreshUserContext();
+            App.showMessage('Player kicked successfully!', 'success');
+          } else {
+            // This fallback is what's causing your white screen. We can now
+            // rely on the App.refreshUserContext function being available.
+            console.error("Critical Error: App.refreshUserContext() is not available.");
+            // window.location.reload(); // We no longer need this sledgehammer.
+          }
+        } else {
+          _showErrorModal('Failed to kick player', result.message || 'Unknown error');
+        }
+      })
+      .withFailureHandler((error) => {
+        _showErrorModal('Failed to kick player', error.toString());
+      })
+      // We now call the corrected, non-recursive backend function name
+      .handleKickPlayerAndRegenerateCode(_currentTeamData.teamId, playerEmail);
+}
+
+  function _updateMaxPlayers() {
+    const maxPlayersSelect = _panel.querySelector('#max-players-select');
+    if (!maxPlayersSelect || !_currentTeamData) return;
+
+    const newMaxPlayers = parseInt(maxPlayersSelect.value);
+    
+    // TODO: Call backend to update team max players
+    // For now, just update local data
+    _currentTeamData.maxPlayers = newMaxPlayers;
+  }
+
+  function _regenerateJoinCode() {
+    if (!_currentTeamData) return;
+
+    // TODO: Call backend to regenerate join code
+    console.log('Regenerating join code for team:', _currentTeamData.teamId);
+  }
+
+  function _saveLogo() {
+    const urlInput = _panel.querySelector('#logo-url-input');
+    const fileInput = _panel.querySelector('#logo-file-input');
+    
+    if (fileInput.files.length > 0) {
+      // Handle file upload
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Data = e.target.result.split(',')[1];
+        
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result.success) {
+              _refreshTeamData();
+              fileInput.value = ''; // Clear file input
+            } else {
+              _showErrorModal('Failed to upload logo', result.message || 'Unknown error');
+            }
+          })
+          .withFailureHandler((error) => {
+            _showErrorModal('Failed to upload logo', error.toString());
+          })
+          .handleLogoUpload(_currentTeamData.teamId, base64Data, file.name, file.type);
+      };
+      reader.readAsDataURL(file);
+    } else if (urlInput.value.trim()) {
+      // Handle URL update
+      google.script.run
+        .withSuccessHandler((result) => {
+          if (result.success) {
+            _refreshTeamData();
+          } else {
+            _showErrorModal('Failed to update logo URL', result.message || 'Unknown error');
+          }
+        })
+        .withFailureHandler((error) => {
+          _showErrorModal('Failed to update logo URL', error.toString());
+        })
+        .handleLogoUrlUpdate(_currentTeamData.teamId, urlInput.value.trim());
+    }
+  }
+
+  function _leaveTeam() {
+    if (!_currentTeamData) return;
+
+    _showConfirmationModal(
+      'Leave Team',
+      `Are you sure you want to leave "${_currentTeamData.teamName}"? This action cannot be undone.`,
+      () => {
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result.success) {
+              // Team left successfully - refresh the UI if App is available
+              if (typeof App !== 'undefined' && App.refreshUserContext) {
+                App.refreshUserContext();
+              } else {
+                console.log('Team left successfully - App controller not available for refresh');
+                // Optionally reload the page as fallback
+                // window.location.reload();
+              }
+            } else {
+              _showErrorModal('Failed to leave team', result.message || 'Unknown error');
+            }
+          })
+          .withFailureHandler((error) => {
+            _showErrorModal('Failed to leave team', error.toString());
+          })
+          .leaveTeamById(_currentTeamData.teamId);
+      }
+    );
+  }
+
+  function _refreshTeamData() {
+    // Request fresh team data from App controller if available
+    if (typeof App !== 'undefined' && App.refreshCurrentTeam) {
+      App.refreshCurrentTeam();
+    } else {
+      console.log('App controller not available for team data refresh');
+      // Optionally implement a fallback method here
+    }
+  }
+
+  function _attachManagementListeners() {
+    // Logo management
+    const logoFileBtn = _panel.querySelector('#logo-file-btn');
+    const logoFileInput = _panel.querySelector('#logo-file-input');
+    const logoSaveBtn = _panel.querySelector('#logo-save-btn');
+
+    if (logoFileBtn && logoFileInput) {
+      logoFileBtn.addEventListener('click', () => logoFileInput.click());
+    }
+
+    if (logoSaveBtn) {
+      logoSaveBtn.addEventListener('click', _saveLogo);
+    }
+
+    // Team settings
+    const maxPlayersSelect = _panel.querySelector('#max-players-select');
+    if (maxPlayersSelect) {
+      maxPlayersSelect.addEventListener('change', _updateMaxPlayers);
+    }
+
+    const regenerateBtn = _panel.querySelector('#regenerate-join-code-btn');
+    if (regenerateBtn) {
+      regenerateBtn.addEventListener('click', _regenerateJoinCode);
+    }
+
+    // Leave team
+    const leaveBtn = _panel.querySelector('#leave-team-btn');
+    if (leaveBtn) {
+      leaveBtn.addEventListener('click', _leaveTeam);
+    }
+
+    // Close drawer X button
+    const closeBtn = _panel.querySelector('#close-drawer-x');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        _isDrawerOpen = false;
+        _toggleDrawer();
+      });
+    }
+  }
+
+  // Public API
+  function init(panelId) {
+    _panel = document.getElementById(panelId);
+    if (!_panel) {
+      console.error(`TeamInfo panel #${panelId} not found!`);
+      return;
+    }
+
+    _teamSelector = _panel.querySelector('#team-selector-container');
+    _logo = _panel.querySelector('#team-logo-container img');
+    _roster = _panel.querySelector('#team-roster-container');
+    _managementToggle = _panel.querySelector('#team-management-toggle');
+    _drawer = _panel.querySelector('#team-management-drawer');
+    _arrow = _panel.querySelector('#team-management-arrow');
+
+    if (_managementToggle) {
+      _managementToggle.addEventListener('click', _onManagementToggle);
+    }
+
+    _attachManagementListeners();
+
+    console.log("TeamInfo Component Initialized.");
+  }
+
+
+function update(teamData, userContext) {
+    _currentTeamData = teamData;
+    _userContext = userContext;
+
+    if (!teamData || !userContext) return;
+
+    // --- START: Added logic to dynamically create team switching buttons ---
+    if (_teamSelector && _userContext.teams) {
+        _teamSelector.innerHTML = ''; // Clear existing static buttons
+
+        _userContext.teams.forEach(team => {
+            const button = document.createElement('button');
+            button.textContent = team.teamName;
+            button.dataset.teamId = team.teamId;
+
+            // Style the button based on whether it's the active team
+            if (team.teamId === _currentTeamData.teamId) {
+                button.className = 'flex-1 p-1 text-sm rounded text-center overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-sky-700 text-sky-100';
+            } else {
+                button.className = 'flex-1 p-1 text-sm rounded text-center overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-slate-600 text-slate-200 hover:bg-slate-500';
+            }
+
+            // Add the click event listener to switch teams
+            button.addEventListener('click', function() {
+                // Prevent switching to the already active team
+                if (this.dataset.teamId !== _currentTeamData.teamId) {
+                    App.requestTeamSwitch(this.dataset.teamId);
+                }
+            });
+
+            _teamSelector.appendChild(button);
+        });
+    }
+    // --- END: Added logic to dynamically create team switching buttons ---
+
+    // This is the corrected roster rendering logic
+    if (_roster && teamData.roster) {
+        _roster.innerHTML = '';
+        
+        teamData.roster.forEach(player => {
+            const isLeader = player.role === 'team_leader';
+            const playerDiv = document.createElement('div');
+            playerDiv.className = 'flex justify-between items-center py-0.5';
+            
+            playerDiv.innerHTML = `
+              <span class="text-slate-200">${player.displayName}</span>
+              <div class="flex items-center gap-1">
+                <span class="text-sky-400 font-mono">${player.initials}</span>
+                ${isLeader ? `
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" class="text-amber-400">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>
+                  </svg>
+                ` : ''}
+              </div>
+            `;
+            _roster.appendChild(playerDiv);
+        });
+    }
+
+    // The rest of the update logic remains the same
+    if (_logo && teamData.logoUrl) {
+      _logo.src = teamData.logoUrl;
+    }
+
+    if (_isDrawerOpen) {
+      _loadManagementData();
+    }
+}
+
+  function closeDrawer() {
+    if (_isDrawerOpen) {
+      _isDrawerOpen = false;
+      _toggleDrawer();
+    }
+  }
+
+  return { 
+    init, 
+    update, 
+    closeDrawer 
+  };
+})();
+</script>

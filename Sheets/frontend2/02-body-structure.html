@@ -1,0 +1,264 @@
+<header class="text-center w-full max-w-screen-2xl mx-auto px-2 sm:px-4 pt-2 pb-4">
+  <h1 class="text-4xl sm:text-5xl font-bold text-sky-400 flex items-center justify-center">
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-check-2 mr-3 text-sky-500"><path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="m16 20 2 2 4-4"/></svg>
+    Match Scheduler
+  </h1>
+</header>
+
+<main class="flex-grow w-full max-w-screen-2xl mx-auto flex flex-col p-2 sm:p-4 gap-4">
+  <div class="flex flex-row gap-4 h-auto">
+    <div id="grid-cell-top-left" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex justify-between items-center">
+      <div class="flex items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-circle-2 text-sky-400 mr-3 flex-shrink-0"><path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><circle cx="12" cy="12" r="10"/></svg>
+        <div>
+            <div id="user-profile-display-name" class="font-semibold text-base text-sky-300">Player Name</div>
+            <div id="user-profile-role" class="text-xs text-slate-400 mt-0.5">Player Role</div>
+        </div>
+      </div>
+      <button id="edit-profile-btn" class="p-2 rounded-md hover:bg-slate-700 transition-colors" title="Edit My Global Profile">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings-2 text-slate-400 hover:text-slate-200"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+      </button>
+    </div>
+
+    <div id="grid-cell-top-center" class="flex-grow bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3">
+      <div id="week-navigation-bar" class="flex flex-col sm:flex-row justify-between items-center gap-2 text-xs sm:text-sm h-full">
+        <button id="prev-week-btn" class="bg-slate-700 hover:bg-slate-600/80 text-slate-300 py-2 px-3 rounded-md transition-colors flex items-center justify-center w-full sm:w-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-left mr-1"><path d="m15 18-6-6 6-6"/></svg>Prev
+        </button>
+        <div class="flex flex-col sm:flex-row items-center gap-2 lg:gap-4 order-last sm:order-none mt-2 sm:mt-0 flex-grow justify-center">
+            <div id="current-week-display-1" class="font-semibold text-slate-100 text-sm sm:text-base py-2 px-3 bg-slate-700/50 rounded-md whitespace-nowrap text-center">Week 24: Jun 9 - Jun 15</div>
+            <div id="current-week-display-2" class="font-semibold text-slate-100 text-sm sm:text-base py-2 px-3 bg-slate-700/50 rounded-md whitespace-nowrap text-center mt-2 sm:mt-0">Week 25: Jun 16 - Jun 22</div>
+        </div>
+        <button id="next-week-btn" class="bg-slate-700 hover:bg-slate-600/80 text-slate-300 py-2 px-3 rounded-md transition-colors flex items-center justify-center w-full sm:w-auto mt-2 sm:mt-0">
+            Next<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right ml-1"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="grid-cell-top-right" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex flex-col justify-center gap-2">
+      <div class="flex justify-between items-center text-sm">
+        <label for="your-team-players" class="text-slate-300">Your Team:</label>
+        <div class="flex items-center gap-2">
+          <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600">-</button>
+          <span id="your-team-players" class="font-bold text-sky-300 w-4 text-center">4</span>
+          <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600">+</button>
+          <span class="text-slate-400">players</span>
+        </div>
+      </div>
+      <div class="flex justify-between items-center text-sm">
+        <label for="opponent-players" class="text-slate-300">Opponent:</label>
+        <div class="flex items-center gap-2">
+          <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600">-</button>
+          <span id="opponent-players" class="font-bold text-sky-300 w-4 text-center">4</span>
+          <button class="px-1.5 py-0.5 bg-slate-700 rounded hover:bg-slate-600">+</button>
+          <span class="text-slate-400">players</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="flex flex-row gap-4 flex-1">
+    <div id="grid-cell-middle-left" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex flex-col gap-3 team-panel relative overflow-hidden">
+      <div id="team-selector-container" class="flex space-x-1 z-10">
+        <button class="flex-1 p-1 text-sm rounded text-center overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-sky-700 text-sky-100">Team Alpha</button>
+        <button class="flex-1 p-1 text-sm rounded text-center overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer bg-slate-600 text-slate-200 hover:bg-slate-500">Team Beta</button>
+      </div>
+      
+      <div id="team-logo-container" class="my-1">
+        <img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" alt="Current Team Logo" class="w-full h-auto rounded border border-slate-700 shadow-md">
+      </div>
+      
+      <div id="team-roster-container" class="space-y-1 text-sm flex-grow">
+      </div>
+      
+      <!-- Team Management Drawer -->
+      <div id="team-management-drawer" class="absolute left-0 right-0 bottom-0 top-14 bg-slate-800 border border-slate-700 rounded-t-lg transform translate-y-[calc(100%-40px)] transition-transform duration-300 ease-out z-30 overflow-hidden">
+        <!-- Drawer Header (Always Visible) -->
+        <button id="team-management-toggle" class="w-full h-10 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-sky-300 flex items-center justify-between px-3 border-b border-slate-600">
+          <span class="text-sm font-medium">Team Management</span>
+          <svg id="team-management-arrow" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform duration-300">
+            <path d="m18 15-6-6-6 6"/>
+          </svg>
+        </button>
+        
+        <!-- Drawer Content -->
+        <div class="p-4 space-y-4 overflow-y-auto" style="height: calc(100% - 40px);">
+          
+          <!-- Logo Management Section -->
+          <div id="logo-management-section">
+            <h4 class="text-sm font-semibold text-sky-400 mb-2">Logo Management</h4>
+            <div class="space-y-2">
+              <input type="text" id="logo-url-input" placeholder="Image URL..." class="w-full text-xs p-2 bg-slate-700 border border-slate-600 rounded text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-sky-500 focus:border-sky-500">
+              <div class="flex gap-2">
+                <input type="file" id="logo-file-input" accept="image/*" class="hidden">
+                <button id="logo-file-btn" class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 px-2 py-1 rounded flex-1">Select File</button>
+                <button id="logo-save-btn" class="text-xs bg-sky-600 hover:bg-sky-700 text-white px-2 py-1 rounded flex-1">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team Settings Section -->
+          <div id="team-settings-section">
+            <h4 class="text-sm font-semibold text-sky-400 mb-2">Team Settings</h4>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-slate-300">Max Players:</label>
+                <select id="max-players-select" class="text-xs p-1 bg-slate-700 border border-slate-600 rounded text-slate-200 focus:ring-1 focus:ring-sky-500">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4" selected>4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                </select>
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-slate-300">Join Code:</label>
+                <div class="flex items-center gap-2">
+                  <span id="current-join-code" class="text-xs font-mono text-sky-300 bg-slate-700 px-2 py-1 rounded">ABC123</span>
+                  <button id="regenerate-join-code-btn" class="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 rounded">Regenerate</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team Roster Management Section -->
+          <div id="roster-management-section">
+            <h4 class="text-sm font-semibold text-sky-400 mb-2">Team Roster</h4>
+            <div id="management-roster-list" class="space-y-1">
+            </div>
+          </div>
+
+          <!-- Leave Team Section (for non-leaders) -->
+          <div id="leave-team-section" class="hidden">
+            <button id="leave-team-btn" class="w-full text-sm bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded">Leave Team</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    
+    <div id="grid-cell-middle-center" class="flex-grow bg-slate-800/60 rounded-lg shadow border border-slate-700 p-1 sm:p-1.5 overflow-y-hidden"><table id="availability-grid-week1" class="table-fixed min-w-full w-full border-separate" style="border-spacing: 0.1rem;"><thead><tr><th class="time-label p-1 w-16 sm:w-20 text-xs font-medium text-slate-400 text-center sticky left-0 bg-slate-800 z-10">Time</th><th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Mon 9th</th><th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Tue 10th</th><th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Wed 11th</th><th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Thu 12th</th><th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Fri 13th</th><th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sat 14th</th><th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sun 15th</th></tr></thead><tbody id="availability-grid-body-week1"></tbody></table></div>
+    <div id="grid-cell-middle-right" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex flex-col gap-2"><div class="flex justify-between items-center flex-shrink-0"><h3 class="text-base font-semibold text-slate-200">Favorites</h3><button class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-300 px-2 py-0.5 rounded-sm shadow">All</button></div><div id="favorites-list-container" class="space-y-1 overflow-y-auto"><div class="bg-slate-700/40 hover:bg-slate-700/60 p-2 rounded flex items-center justify-between cursor-pointer"><div class="flex items-center space-x-2"><img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" class="w-6 h-6 rounded-sm object-cover bg-slate-600"><h5 class="text-sm font-medium text-slate-200 truncate">Favorite Team A</h5></div><svg class="w-4 h-4 text-amber-400" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg></div><div class="bg-slate-800/20 border-2 border-dashed border-slate-700/50 p-2 rounded flex items-center justify-center h-[42px]"><span class="text-xs text-slate-600 italic">Empty favorite slot</span></div><div class="bg-slate-800/20 border-2 border-dashed border-slate-700/50 p-2 rounded flex items-center justify-center h-[42px]"><span class="text-xs text-slate-600 italic">Empty favorite slot</span></div><div class="bg-slate-800/20 border-2 border-dashed border-slate-700/50 p-2 rounded flex items-center justify-center h-[42px]"><span class="text-xs text-slate-600 italic">Empty favorite slot</span></div><div class="bg-slate-800/20 border-2 border-dashed border-slate-700/50 p-2 rounded flex items-center justify-center h-[42px]"><span class="text-xs text-slate-600 italic">Empty favorite slot</span></div></div></div>
+  </div>
+
+
+  <div class="flex flex-row gap-4 flex-1">
+
+<div id="grid-cell-bottom-left" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex flex-col gap-3">
+  <!-- Section 1: Grid Selection Actions -->
+  <div>
+    <h3 class="text-base font-semibold text-slate-200 mb-2">Grid Selection</h3>
+    <div class="flex items-center space-x-1">
+      <button id="btn-select-all" class="text-sm bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2 px-3 rounded shadow flex-1 h-10">All</button>
+      <button id="btn-clear-selection" class="text-sm bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2 px-3 rounded shadow flex-1 h-10">Clear</button>
+    </div>
+    <div class="flex items-center space-x-1 mt-1">
+      <button id="btn-add-me" class="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded shadow flex-1 h-10 disabled:opacity-50 disabled:cursor-not-allowed">Add Me</button>
+      <button id="btn-remove-me" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded shadow flex-1 h-10 disabled:opacity-50 disabled:cursor-not-allowed">Remove Me</button>
+    </div>
+  </div>
+  
+  <!-- Section 2: Save Template -->
+  <div class="border-t border-slate-700 pt-3">
+    <h4 class="text-sm font-semibold text-slate-300 mb-2">Save Template</h4>
+    <div class="flex items-center space-x-1">
+      <button id="btn-save-template-week1" class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 py-2 px-2 rounded flex-1 h-9 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="mr-1">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <path d="M17 21v-8H7v8M7 3v5h8" fill="#1e293b"/>
+        </svg>
+        <span id="save-template-week1-label">Week 24</span>
+      </button>
+      <button id="btn-save-template-week2" class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 py-2 px-2 rounded flex-1 h-9 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="mr-1">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <path d="M17 21v-8H7v8M7 3v5h8" fill="#1e293b"/>
+        </svg>
+        <span id="save-template-week2-label">Week 25</span>
+      </button>
+    </div>
+    <div id="save-template-status" class="text-xs text-green-400 mt-1 h-4"></div>
+  </div>
+  
+  <!-- Section 3: Load Template -->
+  <div class="border-t border-slate-700 pt-3">
+    <h4 class="text-sm font-semibold text-slate-300 mb-2">Load Template</h4>
+    <div class="space-y-1">
+      <button id="btn-load-template-week1" class="w-full text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 py-2 px-3 rounded h-9 flex items-center justify-between group">
+        <span id="load-template-week1-label">Load to Week 24</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 group-hover:text-slate-200">
+          <path d="M7 10l5 5 5-5M12 15V3"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        </svg>
+      </button>
+      <button id="btn-load-template-week2" class="w-full text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 py-2 px-3 rounded h-9 flex items-center justify-between group">
+        <span id="load-template-week2-label">Load to Week 25</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 group-hover:text-slate-200">
+          <path d="M7 10l5 5 5-5M12 15V3"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        </svg>
+      </button>
+      <button id="btn-load-template-both" class="w-full text-xs bg-sky-600 hover:bg-sky-700 text-white py-2 px-3 rounded h-9 flex items-center justify-between">
+        <span>Load to Both Weeks</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M7 10l5 5 5-5M12 15V3"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        </svg>
+      </button>
+    </div>
+    <div id="load-template-status" class="text-xs text-sky-400 mt-1 h-4"></div>
+  </div>
+</div>
+
+    <div id="grid-cell-bottom-center" class="flex-grow bg-slate-800/60 rounded-lg shadow border border-slate-700 p-1 sm:p-1.5 overflow-y-hidden">
+      <table id="availability-grid-week2" class="table-fixed min-w-full w-full border-separate" style="border-spacing: 0.1rem;">
+        <thead>
+          <tr>
+            <th class="time-label p-1 w-16 sm:w-20 text-xs font-medium text-slate-400 text-center sticky left-0 bg-slate-800 z-10">Time</th>
+            <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Mon 16th</th>
+            <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Tue 17th</th>
+            <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Wed 18th</th>
+            <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Thu 19th</th>
+            <th class="day-header-full p-1 text-xs font-medium text-sky-400 text-center bg-slate-700/50 rounded-t-sm">Fri 20th</th>
+            <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sat 21st</th>
+            <th class="day-header-full p-1 text-xs font-medium text-amber-400 text-center bg-slate-700/50 rounded-t-sm">Sun 22nd</th>
+          </tr>
+        </thead>
+        <tbody id="availability-grid-body-week2">
+          </tbody>
+      </table>
+    </div>
+
+    <div id="grid-cell-bottom-right" class="w-72 flex-shrink-0 bg-slate-800/60 rounded-lg shadow border border-slate-700 p-3 flex flex-col gap-2">
+      <div class="flex-shrink-0">
+        <h3 class="text-base font-semibold text-slate-200 mb-1">Browse All Teams</h3>
+        <select id="division-filter-select" class="w-full p-1.5 bg-slate-700 border border-slate-600 rounded text-sm focus:ring-1 focus:ring-sky-500 focus:border-sky-500 text-slate-200">
+          <option value="all">All Divisions</option>
+          <option value="1">Division 1</option>
+          <option value="2">Division 2</option>
+        </select>
+      </div>
+      <div id="browse-teams-list-container" class="flex-grow overflow-y-auto space-y-1 pr-1">
+        <div class="bg-slate-700/40 hover:bg-slate-700/60 p-2 rounded flex items-center justify-between cursor-pointer">
+          <div class="flex items-center space-x-2"><img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" class="w-6 h-6 rounded-sm object-cover bg-slate-600"><h5 class="text-sm font-medium text-slate-200 truncate">Alpha</h5></div>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>
+        </div>
+        <div class="bg-slate-700/40 hover:bg-slate-700/60 p-2 rounded flex items-center justify-between cursor-pointer">
+          <div class="flex items-center space-x-2"><img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" class="w-6 h-6 rounded-sm object-cover bg-slate-600"><h5 class="text-sm font-medium text-slate-200 truncate">Beta</h5></div>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>
+        </div>
+        <div class="bg-slate-700/40 hover:bg-slate-700/60 p-2 rounded flex items-center justify-between cursor-pointer">
+          <div class="flex items-center space-x-2"><img src="https://www.quakeworld.nu/w/resources/assets/qwiki-logo.png" class="w-6 h-6 rounded-sm object-cover bg-slate-600"><h5 class="text-sm font-medium text-slate-200 truncate">Gamma</h5></div>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>

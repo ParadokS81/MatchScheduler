@@ -1,0 +1,31 @@
+<script>
+/**
+ * Browse Teams Component (grid-cell-bottom-right)
+ * Handles filtering and displaying all teams.
+ */
+const BrowseTeams = (function() {
+  let _panel, _filterSelect, _listContainer;
+
+  function _onFilterChange() {
+    const selectedDivision = _filterSelect.value;
+    console.log(`Filter changed to: ${selectedDivision}`);
+    // Logic to re-render the list based on the filter
+  }
+
+  function init(panelId) {
+    _panel = document.getElementById(panelId);
+    if (!_panel) return;
+    _filterSelect = _panel.querySelector('#division-filter-select');
+    _listContainer = _panel.querySelector('#browse-teams-list-container');
+    
+    _filterSelect.addEventListener('change', _onFilterChange);
+    console.log("BrowseTeams Component Initialized.");
+  }
+
+  function render(allTeamsData) {
+      // Logic to render the list of all teams
+  }
+
+  return { init, render };
+})();
+</script> 

@@ -1,0 +1,226 @@
+<script>
+// GridSelectionService.js
+const GridSelectionService = (function() {
+    // Private state
+    let _selectedCells = new Set();
+    let _lastClickedCell = null;
+    // REMOVED: _isShiftPressed is no longer a persistent state in this service.
+    // It will be passed per-call via event.shiftKey.
+    let _selectionChangeCallbacks = [];
+
+    // REMOVED: document.addEventListener for keydown/keyup are no longer needed here.
+
+    // Private methods for internal use
+    function _notifySelectionChange() {
+        const count = _selectedCells.size;
+        _selectionChangeCallbacks.forEach(callback => callback(count));
+    }
+
+    function _createCellKey(row, col, gridId) {
+        return `${row},${col},${gridId}`;
+    }
+
+    function _parseCellKey(cellKey) {
+        const parts = cellKey.split(',');
+        return {
+            row: parseInt(parts[0]),
+            col: parseInt(parts[1]),
+            gridId: parts[2]
+        };
+    }
+
+    // Public API - These functions are exposed for other components to use
+    function init() {
+        console.log("GridSelectionService Initialized.");
+        clear(); // Resets selected cells and _lastClickedCell to null
+        console.log("GridSelectionService init: _lastClickedCell is now", _lastClickedCell); 
+    }
+
+    /**
+     * Toggles the selection state of a single cell.
+     * IMPORTANT: Now takes isShiftPressed as a direct argument.
+     * @param {number} row - The row index of the cell.
+     * @param {number} col - The column index of the cell.
+     * @param {string} gridId - The ID of the grid ('week1' or 'week2').
+     * @param {boolean} isShiftCurrentlyPressed - Indicates if Shift was pressed during the click event.
+     * @returns {boolean} True if the cell is now selected, false otherwise.
+     */
+    function toggleCell(row, col, gridId, isShiftCurrentlyPressed) { // NEW PARAMETER
+        const cellKey = _createCellKey(row, col, gridId);
+        
+        // Log current state for debugging
+        console.log("toggleCell called (GridSelectionService):", { row, col, gridId, isShiftPressed: isShiftCurrentlyPressed, lastClickedCell: _lastClickedCell }); 
+
+        // Check for shift-click scenario
+        if (isShiftCurrentlyPressed && _lastClickedCell) { // Use the passed parameter
+            // Only perform rectangle selection if within the same grid.
+            // Cross-grid shift-clicks behave like regular toggles.
+            if (_lastClickedCell.gridId === gridId) {
+                selectRectangle(
+                    _lastClickedCell.row, _lastClickedCell.col,
+                    row, col, gridId
+                );
+                console.log("toggleCell (GridSelectionService): Performed rectangle select."); 
+            } else {
+                // For shift-clicks across different grids, just toggle the individual cell.
+                if (_selectedCells.has(cellKey)) {
+                    _selectedCells.delete(cellKey);
+                } else {
+                    _selectedCells.add(cellKey);
+                }
+                console.log("toggleCell (GridSelectionService): Performed cross-grid toggle (individual cell)."); 
+            }
+        } else {
+            // This is a regular click (not holding Shift, or first click in a new sequence).
+            // It toggles the individual cell.
+            if (_selectedCells.has(cellKey)) {
+                _selectedCells.delete(cellKey);
+            } else {
+                _selectedCells.add(cellKey);
+            }
+            console.log("toggleCell (GridSelectionService): Performed regular toggle (individual cell)."); 
+        }
+        
+        // IMPORTANT: Update _lastClickedCell with the current cell regardless of shift state.
+        // This cell becomes the new reference point for future shift-clicks.
+        _lastClickedCell = { row, col, gridId };
+        console.log("toggleCell (GridSelectionService): _lastClickedCell set to", _lastClickedCell); 
+
+        _notifySelectionChange(); // Inform listeners about selection count change
+        return _selectedCells.has(cellKey); // Return the new selection state of the cell
+    }
+
+    /**
+     * Selects all cells within a rectangular region defined by two corners.
+     * Used for shift-click functionality within the same grid.
+     */
+    function selectRectangle(startRow, startCol, endRow, endCol, gridId) {
+        const minRow = Math.min(startRow, endRow);
+        const maxRow = Math.max(startRow, endRow);
+        const minCol = Math.min(startCol, endCol);
+        const maxCol = Math.max(startCol, endCol); // Corrected typo: Math.max
+        
+        // Iterate through all cells in the rectangle and add them to selection
+        for (let row = minRow; row <= maxRow; row++) {
+            for (let col = minCol; col <= maxCol; col++) {
+                const cellKey = _createCellKey(row, col, gridId);
+                _selectedCells.add(cellKey);
+            }
+        }
+        _notifySelectionChange();
+    }
+
+    /**
+     * Selects all cells in a specific time row (horizontal selection).
+     * IMPORTANT: Now takes isShiftPressed as a direct argument.
+     */
+    function selectTimeRow(timeIndex, gridId, isShiftCurrentlyPressed) { // NEW PARAMETER
+        // For shift-click on time row, we typically want to add to existing selection.
+        // If not shift, clear first.
+        if (!isShiftCurrentlyPressed) {
+            clear(); // Clear existing selection unless shift is held
+        }
+        // Assuming 7 days (0-6) per week
+        for (let col = 0; col < 7; col++) {
+            const cellKey = _createCellKey(timeIndex, col, gridId);
+            _selectedCells.add(cellKey);
+        }
+        _notifySelectionChange();
+    }
+
+    /**
+     * Selects all cells in a specific day column (vertical selection).
+     * IMPORTANT: Now takes isShiftPressed as a direct argument.
+     */
+    function selectDayColumn(dayIndex, gridId, isShiftCurrentlyPressed) { // NEW PARAMETER
+        // For shift-click on day header, we typically want to add to existing selection.
+        // If not shift, clear first.
+        if (!isShiftCurrentlyPressed) {
+            clear(); // Clear existing selection unless shift is held
+        }
+        const gridElement = document.getElementById(`availability-grid-${gridId}`);
+        if (!gridElement) return;
+        
+        const rows = gridElement.querySelectorAll('tbody tr');
+        for (let row = 0; row < rows.length; row++) {
+            const cellKey = _createCellKey(row, dayIndex, gridId);
+            _selectedCells.add(cellKey);
+        }
+        _notifySelectionChange();
+    }
+
+    function selectAll() {
+        // Select all cells in both visible grids
+        ['week1', 'week2'].forEach(gridId => {
+            const gridElement = document.getElementById(`availability-grid-${gridId}`);
+            if (!gridElement) return;
+            
+            const rows = gridElement.querySelectorAll('tbody tr');
+            rows.forEach((row, timeIndex) => {
+                for (let col = 0; col < 7; col++) {
+                    const cellKey = _createCellKey(timeIndex, col, gridId);
+                    _selectedCells.add(cellKey);
+                }
+            });
+        });
+        
+        _notifySelectionChange();
+    }
+
+    function clear() {
+        _selectedCells.clear();
+        _lastClickedCell = null;
+        console.log("clear (GridSelectionService): _lastClickedCell reset to", _lastClickedCell); 
+        _notifySelectionChange();
+    }
+
+    function getSelection() {
+        return Array.from(_selectedCells);
+    }
+
+    function getSelectionByGrid() {
+        const byGrid = {
+            week1: [],
+            week2: []
+        };
+        
+        _selectedCells.forEach(cellKey => {
+            const parsed = _parseCellKey(cellKey);
+            if (byGrid[parsed.gridId]) {
+                byGrid[parsed.gridId].push({
+                    row: parsed.row,
+                    col: parsed.col
+                });
+            }
+        });
+        
+        return byGrid;
+    }
+
+    function isSelected(row, col, gridId) {
+        const cellKey = _createCellKey(row, col, gridId);
+        return _selectedCells.has(cellKey);
+    }
+
+    function onSelectionChange(callback) {
+        _selectionChangeCallbacks.push(callback);
+    }
+
+    // REMOVED: setShiftPressed and getIsShiftPressed are removed.
+
+    // Expose public functions
+    return {
+        init,
+        toggleCell,
+        selectRectangle,
+        selectTimeRow,
+        selectDayColumn,
+        selectAll,
+        clear,
+        getSelection,
+        getSelectionByGrid,
+        isSelected,
+        onSelectionChange
+    };
+})();
+</script>

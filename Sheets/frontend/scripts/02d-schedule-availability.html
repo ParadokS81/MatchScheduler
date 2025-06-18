@@ -1,0 +1,485 @@
+<script>
+    /*
+     * Schedule Manager - Schedule Loading & Availability Updates
+     *
+     * @version 2.0.1 (2025-06-10) - Moved weekHTMLCache to 01-init.html
+     * @version 2.0.0 (2025-06-10) - Major refactor to use Server-Side Rendering
+     * @version 1.0.0 (2025-06-07) - Extracted from 02-core.html for better organization.
+     *
+     * Purpose: Schedule loading via SSR, grid rendering, and availability update pipeline
+     * Dependencies: Cache functions from 02a-cache-navigation.html, team functions from 02c-team-ui.html
+     * Provides: Schedule loading, grid rendering, availability updates, status messaging
+     */
+
+    function loadTeamSchedule(teamId, isManualRefresh = false) {
+        console.log(`[ClientScript SSR] loadTeamSchedule CALLED for Team ID: ${teamId}. Manual Refresh: ${isManualRefresh}`);
+        
+        // Use client-side cache only for navigation, not for initial load/refresh
+        if (!isManualRefresh && isCacheValidForTeam(teamId) && Object.keys(weekHTMLCache).length > 0) {
+            console.log("[ClientScript SSR] Using cached data for team schedule navigation.");
+            renderFromCache();
+            return;
+        }
+
+        // Clear all caches when switching teams or on manual refresh
+        if (weekCache.teamId !== teamId || isManualRefresh) {
+            clearWeekCache();
+            weekHTMLCache = {};
+        }
+
+        const grid1 = document.getElementById('availability-grid-week1');
+        const grid2 = document.getElementById('availability-grid-week2');
+        const week1Display = document.getElementById('current-week-display-1');
+        const week2Display = document.getElementById('current-week-display-2');
+        const refreshStatusEl = document.getElementById('refresh-status-message');
+
+        const loadingHTML = `<thead></thead><tbody><tr><td colspan="8" class="p-10 text-center text-slate-400 italic"><svg class="animate-spin h-6 w-6 text-sky-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Loading schedule...</td></tr></tbody>`;
+
+        if(grid1) grid1.innerHTML = loadingHTML;
+        if(grid2) grid2.innerHTML = loadingHTML;
+
+        if(isManualRefresh && refreshStatusEl) {
+            refreshStatusEl.textContent = 'Refreshing all weeks...';
+            refreshStatusEl.className = 'text-center text-xs text-sky-400 h-4 mb-2 mx-2 sm:mx-0';
+        }
+        
+        if (week1Display) week1Display.innerHTML = `Loading...`;
+        if (week2Display) week2Display.innerHTML = `Loading...`;
+
+        // Single call to get all 4 weeks of pre-rendered HTML and data
+        google.script.run
+            .withSuccessHandler(function(response) {
+                console.log("[ClientScript SSR] 4-week batch response received.");
+                
+                if (response && response.success && response.scheduleData) {
+                    // 1. Cache the raw data object for optimistic updates
+                    const scheduleData = response.scheduleData;
+                    weekCache.teamId = teamId;
+                    weekCache.players = scheduleData.players;
+                    weekCache.lastLoaded = new Date().getTime();
+                    weekCache.weeks = {};
+                    scheduleData.weeks.forEach(weekData => {
+                        if (weekData && typeof weekData.error === 'undefined') {
+                            cacheWeek(weekData.year, weekData.weekNumber, weekData);
+                        }
+                    });
+
+                    // 2. Cache the pre-rendered HTML strings
+                    weekHTMLCache = response.renderedWeeksHTML || {};
+                    
+                    clientLastLoadTimestamp = weekCache.lastLoaded;
+                    console.log("[ClientScript SSR] Cached raw data and pre-rendered HTML for", Object.keys(weekHTMLCache).length, "weeks.");
+                    
+                    // 3. Render the initial view from the new HTML cache
+                    renderFromCache();
+                    
+                    const successMessage = isManualRefresh ? "All weeks refreshed!" : "Schedule loaded!";
+                    if(isManualRefresh && refreshStatusEl) {
+                        refreshStatusEl.textContent = successMessage;
+                        refreshStatusEl.className = 'text-center text-xs text-green-500 h-4 mb-2 mx-2 sm:mx-0';
+                        setTimeout(() => { refreshStatusEl.textContent = ''; }, 3000);
+                    }
+                } else {
+                    const errMsg = (response && response.message) ? response.message : "Failed to load weeks.";
+                    console.error("[ClientScript SSR] Failed to load team weeks:", errMsg);
+                    if(grid1) grid1.innerHTML = `<tbody><tr><td colspan="8" class="p-4 text-center text-red-400">Error: ${errMsg}</td></tr></tbody>`;
+                    if(grid2) grid2.innerHTML = `<tbody><tr><td colspan="8" class="p-4 text-center text-slate-500 italic"></td></tr></tbody>`;
+                    if(isManualRefresh && refreshStatusEl) {
+                        refreshStatusEl.textContent = 'Error refreshing weeks.';
+                        refreshStatusEl.className = 'text-center text-xs text-red-500 h-4 mb-2 mx-2 sm:mx-0';
+                    }
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error("[ClientScript SSR] Exception loading team weeks:", error);
+                if(grid1) grid1.innerHTML = `<tbody><tr><td colspan="8" class="p-4 text-center text-red-400">Exception: ${error.message}</td></tr></tbody>`;
+                if(isManualRefresh && refreshStatusEl) {
+                    refreshStatusEl.textContent = 'Exception refreshing weeks.';
+                    refreshStatusEl.className = 'text-center text-xs text-red-500 h-4 mb-2 mx-2 sm:mx-0';
+                }
+            })
+            .getPreRenderedScheduleGrids(teamId);
+    }
+
+    function renderFromCache() {
+        console.log("[ClientScript SSR] Rendering from cache, navigation state:", showingFutureWeeks);
+        
+        const weeksToDisplay = calculateWeeksToDisplay();
+        const week1Info = weeksToDisplay.week1;
+        const week2Info = weeksToDisplay.week2;
+        
+        const week1Key = `${week1Info.year}-W${week1Info.week}`;
+        const week2Key = `${week2Info.year}-W${week2Info.week}`;
+        
+        const grid1_HTML = weekHTMLCache[week1Key];
+        const grid2_HTML = weekHTMLCache[week2Key];
+
+        const grid1_Table = document.getElementById('availability-grid-week1');
+        const grid2_Table = document.getElementById('availability-grid-week2');
+        const week1Display = document.getElementById('current-week-display-1');
+        const week2Display = document.getElementById('current-week-display-2');
+
+        // Render Week 1
+        if (grid1_HTML && grid1_Table) {
+            grid1_Table.innerHTML = grid1_HTML;
+            const mondayW1 = getMondayFromWeekNumberAndYear(week1Info.year, week1Info.week);
+            const sundayW1 = new Date(mondayW1);
+            sundayW1.setDate(mondayW1.getDate() + 6);
+            if(week1Display) {
+              week1Display.innerHTML = `Week ${week1Info.week}. <span class="font-normal text-slate-300">${formatMonthDay(mondayW1)} - ${formatMonthDay(sundayW1)}</span>`;
+              week1Display.dataset.year = week1Info.year;
+              week1Display.dataset.week = week1Info.week;
+            }
+        } else {
+            if(grid1_Table) grid1_Table.innerHTML = `<tbody><tr><td colspan="8" class="p-4 text-center text-slate-500">Week ${week1Info.week} not cached</td></tr></tbody>`;
+            if(week1Display) week1Display.innerHTML = `Week ${week1Info.week}, ${week1Info.year}`;
+        }
+        
+        // Render Week 2
+        if (grid2_HTML && grid2_Table) {
+            grid2_Table.innerHTML = grid2_HTML;
+            const mondayW2 = getMondayFromWeekNumberAndYear(week2Info.year, week2Info.week);
+            const sundayW2 = new Date(mondayW2);
+            sundayW2.setDate(mondayW2.getDate() + 6);
+            if(week2Display) {
+              week2Display.innerHTML = `Week ${week2Info.week}. <span class="font-normal text-slate-300">${formatMonthDay(mondayW2)} - ${formatMonthDay(sundayW2)}</span>`;
+              week2Display.dataset.year = week2Info.year;
+              week2Display.dataset.week = week2Info.week;
+            }
+        } else {
+            if(grid2_Table) grid2_Table.innerHTML = `<tbody><tr><td colspan="8" class="p-4 text-center text-slate-500">Week ${week2Info.week} not cached</td></tr></tbody>`;
+            if(week2Display) week2Display.innerHTML = `Week ${week2Info.week}, ${week2Info.year}`;
+        }
+        
+        window.currentGrid1Year = week1Info.year;
+        window.currentGrid1Week = week1Info.week;
+        window.currentGrid2Year = week2Info.year;
+        window.currentGrid2Week = week2Info.week;
+        console.log("[ClientScript SSR] Finished rendering from cache.");
+    }
+
+    function getDisplayedWeekInfo(gridDisplayIdSuffix) {
+        const displayElementId = `current-week-display-${gridDisplayIdSuffix}`;
+        const displayElement = document.getElementById(displayElementId);
+        if (displayElement && displayElement.dataset.year && displayElement.dataset.week) {
+             return {
+                year: parseInt(displayElement.dataset.year),
+                weekNumber: parseInt(displayElement.dataset.week)
+            };
+        }
+        console.warn(`[ClientScript] Could not get year/week from data attributes for ${displayElementId}.`);
+        const now = new Date();
+        let year = now.getFullYear();
+        let week = getISOWeekNumber(now);
+        if (gridDisplayIdSuffix === '2') {
+            const nextWeekDate = new Date(now);
+            nextWeekDate.setDate(now.getDate() + 7);
+            year = nextWeekDate.getFullYear();
+            week = getISOWeekNumber(nextWeekDate);
+        }
+        return { year: year, weekNumber: week };
+    }
+    
+function renderAvailabilityGrid(tbodyId, scheduleData, teamPlayers) {
+    const tbodyElement = document.getElementById(tbodyId);
+    if (!tbodyElement) {
+        console.error("[ClientScript] TBODY not found for grid rendering:", tbodyId);
+        return;
+    }
+    tbodyElement.innerHTML = ''; 
+
+    if (!scheduleData || !scheduleData.timeSlots || !scheduleData.availability || scheduleData.timeSlots.length !== scheduleData.availability.length) {
+        console.error("[ClientScript] Invalid or mismatched scheduleData for renderAvailabilityGrid.");
+        tbodyElement.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-red-400">Invalid schedule data structure received for rendering.</td></tr>';
+        return;
+    }
+
+    const gridId = tbodyId.replace('availability-grid-body-', ''); 
+    
+    // --- NEW DIAGNOSTIC LINE ---
+    // Let's see what gridId is right before we use it to build the cells.
+    console.log(`[DIAGNOSTIC] renderAvailabilityGrid is building rows for container '${tbodyId}'. The static gridId being used is: '${gridId}'`);
+    
+    scheduleData.timeSlots.forEach(function(time, timeIndex) {
+        let rowHtml = '<tr><td class="time-label p-1 text-xs text-slate-400 text-center font-mono whitespace-nowrap sticky left-0 bg-slate-800 z-10 rounded-l-sm cursor-pointer hover:bg-slate-700" onclick="selectTimeRow(' + timeIndex + ', \'' + gridId + '\')">' + time + '</td>';
+        if (scheduleData.availability[timeIndex] && scheduleData.availability[timeIndex].days && scheduleData.availability[timeIndex].days.length === 7) {
+            scheduleData.availability[timeIndex].days.forEach(function(dayData, dayIndexLocal) {
+                const isWeekend = dayIndexLocal >= 5; 
+                let cellBg = isWeekend ? 'bg-slate-700/30 hover:bg-slate-600/50' : 'bg-slate-700/10 hover:bg-slate-700/30';
+                let cellText = (dayData.initials && dayData.initials.length > 0) ? dayData.initials.join(', ') : '';
+                rowHtml += '<td class="availability-cell ' + cellBg + ' cursor-pointer rounded-sm h-9 sm:h-10 border border-slate-700/50 align-middle' + (dayIndexLocal === 6 ? ' rounded-r-sm' : '') + '" onclick="handleCellClick(' + timeIndex + ', ' + dayIndexLocal + ', \'' + gridId + '\')"><div class="leading-tight">' + cellText + '</div></td>';
+            });
+        } else {
+            console.warn("[ClientScript] Missing or malformed days data for time slot: " + time + " (index: " + timeIndex + ")");
+            for (let i = 0; i < 7; i++) { 
+                 const isWeekend = i >= 5;
+                 let cellBg = isWeekend ? 'bg-slate-700/30 hover:bg-slate-600/50' : 'bg-slate-700/10 hover:bg-slate-700/30';
+                rowHtml += '<td class="availability-cell ' + cellBg + ' cursor-pointer rounded-sm h-9 sm:h-10 border border-slate-700/50 align-middle' + (i === 6 ? ' rounded-r-sm' : '') + '" onclick="handleCellClick(' + timeIndex + ', ' + i + ', \'' + gridId + '\')"><div class="leading-tight"></div></td>';
+            }
+        }
+        rowHtml += '</tr>';
+        tbodyElement.innerHTML += rowHtml;
+    });
+    
+    const grid = document.getElementById('availability-grid-' + gridId);
+    if (grid) {
+        const dayHeaders = grid.querySelectorAll('thead th.day-header-full');
+        dayHeaders.forEach(function(header, index) {
+            header.classList.add('cursor-pointer', 'hover:bg-slate-600/50');
+            header.onclick = function(e) {
+                e.preventDefault();
+                selectDayColumn(index, gridId);
+            };
+        });
+    }
+  }
+
+    // --- Availability Update Pipeline ---
+    // The entire pipeline below remains UNCHANGED. It works perfectly with the
+    // server-rendered HTML because it targets cells by coordinates and classes,
+    // which are all present in the HTML string we now receive from the server.
+
+    function validateAvailabilityUpdate() {
+        if (!currentActiveTeamId) {
+            return { valid: false, message: 'No active team selected.', type: 'error' };
+        }
+        if (selectedCells.size === 0) {
+            return { valid: false, message: 'Please select some time slots first.', type: 'warning' };
+        }
+        const userInitials = getUserInitialsForTeam(currentActiveTeamId);
+        if (!userInitials || userInitials === '??' || !isValidInitials(userInitials)) {
+            return { 
+                valid: false, 
+                message: 'Your initials for this team are not set or are invalid. Please update your team profile.', 
+                type: 'error' 
+            };
+        }
+        return { valid: true, userInitials };
+    }
+
+    function getUserInitialsForTeam(teamId) {
+        const userTeams = userContext?.teams || [];
+        const activeTeamContext = userTeams.find(t => t.teamId === teamId);
+        return activeTeamContext?.initials || null;
+    }
+
+    function applyOptimisticUpdate(cellsToUpdate, action, userInitials) {
+        const ucUserInitials = userInitials.toUpperCase();
+        cellsToUpdate.forEach(cellKey => {
+            const [visualRow, visualCol, gridId] = cellKey.split(',').map((v, i) => i < 2 ? parseInt(v) : v);
+            updateCellContent(gridId, visualRow, visualCol, ucUserInitials, action);
+        });
+    }
+
+    function updateCellContent(gridId, visualRow, visualCol, userInitials, action) {
+        const cellElement = getCellElement(gridId, visualRow, visualCol);
+        const contentDiv = cellElement?.querySelector('div');
+        if (!contentDiv) return;
+        const currentInitials = parseCellInitials(contentDiv.innerHTML);
+        const updatedInitials = updateInitialsList(currentInitials, userInitials, action);
+        contentDiv.innerHTML = updatedInitials.join(', ');
+    }
+
+  function getCellElement(gridId, visualRow, visualCol) {
+    const grid = document.getElementById(`availability-grid-${gridId}`);
+    
+    // --- DEBUG START ---
+    if (!grid) {
+        console.error(`[DEBUG] getCellElement: Could not find grid with id 'availability-grid-${gridId}'`);
+        return null;
+    }
+    // --- DEBUG END ---
+    
+    const cell = grid.querySelector(`tbody tr:nth-child(${visualRow + 1}) td:nth-child(${visualCol + 2})`);
+
+    // --- DEBUG START ---
+    if (!cell) {
+        console.error(`[DEBUG] getCellElement: Could not find cell at row ${visualRow}, col ${visualCol} in grid ${gridId}.`);
+    }
+    // --- DEBUG END ---
+
+    return cell;
+  }
+
+    function parseCellInitials(cellContent) {
+        return cellContent.trim() 
+            ? cellContent.toUpperCase().split(/[,\s]+/).filter(e => e.trim())
+            : [];
+    }
+
+    function updateInitialsList(initials, userInitials, action) {
+        const updated = [...initials];
+        const index = updated.indexOf(userInitials);
+        if (action === 'add' && index === -1) {
+            updated.push(userInitials);
+            updated.sort();
+        } else if (action === 'remove' && index > -1) {
+            updated.splice(index, 1);
+        }
+        return updated;
+    }
+
+    function prepareUpdatePayload(cellsToProcess) {
+        const week1Info = getDisplayedWeekInfo('1');
+        const week2Info = getDisplayedWeekInfo('2');
+        const slotsToUpdateByWeek = {};
+        cellsToProcess.forEach(cellKey => {
+            const [visualRow, visualCol, gridId] = cellKey.split(',').map((v, i) => i < 2 ? parseInt(v) : v);
+            const targetWeekInfo = gridId === 'week1' ? week1Info : week2Info;
+            if (!isValidWeekInfo(targetWeekInfo)) {
+                console.error(`[ClientScript] Missing week info for ${gridId}. Cannot process cell: ${cellKey}`);
+                return;
+            }
+            const weekKey = `${targetWeekInfo.year}-W${targetWeekInfo.weekNumber}`;
+            if (!slotsToUpdateByWeek[weekKey]) {
+                slotsToUpdateByWeek[weekKey] = {
+                    year: targetWeekInfo.year,
+                    weekNumber: targetWeekInfo.weekNumber,
+                    selections: []
+                };
+            }
+            slotsToUpdateByWeek[weekKey].selections.push({ visualRow, visualCol });
+        });
+        return Object.values(slotsToUpdateByWeek);
+    }
+
+    function isValidWeekInfo(weekInfo) {
+        return weekInfo && typeof weekInfo.year !== 'undefined' && typeof weekInfo.weekNumber !== 'undefined';
+    }
+
+    function setButtonsDisabled(disabled) {
+        const btnAddMe = document.getElementById('btn-add-me');
+        const btnRemoveMe = document.getElementById('btn-remove-me');
+        if (btnAddMe) btnAddMe.disabled = disabled;
+        if (btnRemoveMe) btnRemoveMe.disabled = disabled;
+    }
+
+    function handleUpdateError(message) {
+        showStatusMessage(message, 'error');
+        loadTeamSchedule(currentActiveTeamId, true); // Refresh to actual state
+    }
+
+    function handleUpdateSuccess(response) {
+        const message = response.message || 'Successfully updated availability!';
+        showStatusMessage(message, 'success');
+        clientLastLoadTimestamp = new Date().getTime();
+        checkForExternalUpdates();
+    }
+
+    function checkForExternalUpdates() {
+        if (!currentActiveTeamId) return;
+        google.script.run
+            .withSuccessHandler(function(updateCheckResponse) {
+                if (updateCheckResponse && updateCheckResponse.success && updateCheckResponse.hasChanged) {
+                    clearWeekCache();
+                    weekHTMLCache = {};
+                    loadTeamSchedule(currentActiveTeamId, true);
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error("Error checking for external updates:", error);
+            })
+            .handleCheckForScheduleUpdates(currentActiveTeamId, clientLastLoadTimestamp);
+    }
+
+    function handleAvailabilityUpdate(action) {
+        const validation = validateAvailabilityUpdate();
+        if (!validation.valid) {
+            showStatusMessage(validation.message, validation.type);
+            return;
+        }
+        const cellsToProcess = new Set(selectedCells);
+        const payload = prepareUpdatePayload(cellsToProcess);
+        if (payload.length === 0 && cellsToProcess.size > 0) {
+            handleUpdateError('Error preparing update: Could not map selections to target weeks. Refreshing.');
+            return;
+        }
+        applyOptimisticUpdate(cellsToProcess, action, validation.userInitials);
+        clearAllSelections();
+        const actionText = action === 'add' ? 'Adding' : 'Removing';
+        showStatusMessage(`${actionText} availability...`, 'info');
+        setButtonsDisabled(true);
+        google.script.run
+            .withSuccessHandler(response => {
+                setButtonsDisabled(false);
+                if (response?.success) {
+                    handleUpdateSuccess(response);
+                } else {
+                    handleUpdateError(response?.message || 'Failed to update. Refreshing grid to actual state.');
+                }
+            })
+            .withFailureHandler(error => {
+                setButtonsDisabled(false);
+                handleUpdateError(`Error: ${error.message || 'Failed to update. Refreshing grid.'}`);
+            })
+            .updatePlayerAvailabilityForMultipleWeeks(currentActiveTeamId, action, payload);
+    }
+
+    function isValidInitials(initials) { 
+        if (!initials || typeof initials !== 'string') return false;
+        const exactLength = (window.BLOCK_CONFIG_CLIENT && 
+                             window.BLOCK_CONFIG_CLIENT.TEAM_SETTINGS && 
+                             typeof window.BLOCK_CONFIG_CLIENT.TEAM_SETTINGS.MAX_PLAYER_INITIALS_LENGTH !== 'undefined')
+                            ? window.BLOCK_CONFIG_CLIENT.TEAM_SETTINGS.MAX_PLAYER_INITIALS_LENGTH
+                            : 2;
+        const trimmedInitials = initials.trim().toUpperCase();
+        if (trimmedInitials.length !== exactLength) {
+            return false;
+        }
+        const initialsRegex = new RegExp(`^[A-Z0-9]{${exactLength}}$`);
+        return initialsRegex.test(trimmedInitials);
+    }
+
+    function showStatusMessage(message, type = 'info') {
+        const statusEl = document.getElementById('refresh-status-message');
+        if (!statusEl) return;
+        statusEl.textContent = message;
+        switch(type) {
+            case 'success':
+                statusEl.className = 'text-center text-xs text-green-500 h-4 mb-2 mx-2 sm:mx-0';
+                setTimeout(() => statusEl.textContent = '', 3000);
+                break;
+            case 'error':
+                statusEl.className = 'text-center text-xs text-red-500 h-4 mb-2 mx-2 sm:mx-0';
+                setTimeout(() => statusEl.textContent = '', 5000);
+                break;
+            case 'warning':
+                statusEl.className = 'text-center text-xs text-amber-500 h-4 mb-2 mx-2 sm:mx-0';
+                setTimeout(() => statusEl.textContent = '', 4000);
+                break;
+            default: // info
+                statusEl.className = 'text-center text-xs text-sky-400 h-4 mb-2 mx-2 sm:mx-0';
+                setTimeout(() => statusEl.textContent = '', 3000);
+        }
+    }
+
+    function handleManualRefresh() {
+        if (!currentActiveTeamId) {
+            showStatusMessage("No active team selected.", 'warning');
+            return;
+        }
+        const refreshStatusEl = document.getElementById('refresh-status-message');
+        refreshStatusEl.textContent = "Checking for updates...";
+        refreshStatusEl.className = 'text-center text-xs text-sky-400 h-4 mb-2 mx-2 sm:mx-0';
+        google.script.run
+            .withSuccessHandler(function(updateCheckResponse) {
+                if (updateCheckResponse && updateCheckResponse.success) {
+                    if (updateCheckResponse.hasChanged) {
+                        loadTeamSchedule(currentActiveTeamId, true);
+                    } else {
+                        refreshStatusEl.textContent = "Schedule is up to date.";
+                        refreshStatusEl.className = 'text-center text-xs text-green-500 h-4 mb-2 mx-2 sm:mx-0';
+                        setTimeout(() => { refreshStatusEl.textContent = ''; }, 2000);
+                    }
+                } else {
+                     refreshStatusEl.textContent = `Error: ${updateCheckResponse.error || 'Update check failed.'}`;
+                     refreshStatusEl.className = 'text-center text-xs text-red-500 h-4 mb-2 mx-2 sm:mx-0';
+                }
+            })
+            .withFailureHandler(function(error) {
+                refreshStatusEl.textContent = `Error checking for updates: ${error.message}`;
+                refreshStatusEl.className = 'text-center text-xs text-red-500 h-4 mb-2 mx-2 sm:mx-0';
+            })
+            .handleCheckForScheduleUpdates(currentActiveTeamId, clientLastLoadTimestamp);
+    }
+  </script>

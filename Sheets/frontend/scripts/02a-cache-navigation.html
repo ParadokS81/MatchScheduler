@@ -1,0 +1,154 @@
+<script>
+    /*
+     * Schedule Manager - Cache & Navigation Management
+     *
+     * @version 1.0.0 (2025-06-07) - Extracted from 02-core.html for better organization.
+     *
+     * Purpose: Week cache system and navigation controls
+     * Dependencies: Global variables from 01-init.html (weekCache, showingFutureWeeks)
+     * Provides: Cache management, week calculations, navigation button controls
+     * Functions: clearWeekCache, getCachedWeek, cacheWeek, calculateWeeksToDisplay, updateNavigationButtons
+     */
+    // 4-Week Cache Management
+    function clearWeekCache() {
+        weekCache = {
+            teamId: null,
+            weeks: {},
+            lastLoaded: null,
+            players: null
+        };
+    }
+
+    function getCachedWeek(year, weekNumber) {
+        const weekKey = `${year}-${weekNumber}`;
+        return weekCache.weeks[weekKey] || null;
+    }
+
+    function cacheWeek(year, weekNumber, scheduleData) {
+        const weekKey = `${year}-${weekNumber}`;
+        weekCache.weeks[weekKey] = scheduleData;
+    }
+
+    function getAllAvailableWeeks() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentWeek = getISOWeekNumber(now);
+        
+        const weeks = [];
+        for (let i = 0; i < 4; i++) {
+            const weekDate = new Date(now);
+            weekDate.setDate(now.getDate() + (i * 7));
+            weeks.push({
+                year: weekDate.getFullYear(),
+                week: getISOWeekNumber(weekDate)
+            });
+        }
+        return weeks;
+    }
+
+    function isCacheValidForTeam(teamId) {
+        return weekCache.teamId === teamId && 
+               weekCache.lastLoaded && 
+               (new Date().getTime() - weekCache.lastLoaded) < 300000; // 5 minutes
+    }
+
+    function calculateWeeksToDisplay() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentWeek = getISOWeekNumber(now);
+        
+        if (showingFutureWeeks) {
+            // Show weeks +2 and +3
+            const week1Date = new Date(now);
+            week1Date.setDate(now.getDate() + 14); // +2 weeks
+            const week1Year = week1Date.getFullYear();
+            const week1Num = getISOWeekNumber(week1Date);
+            
+            const week2Date = new Date(now);
+            week2Date.setDate(now.getDate() + 21); // +3 weeks
+            const week2Year = week2Date.getFullYear();
+            const week2Num = getISOWeekNumber(week2Date);
+            
+            return {
+                week1: { year: week1Year, week: week1Num },
+                week2: { year: week2Year, week: week2Num }
+            };
+        } else {
+            // Show current and +1
+            const week2Date = new Date(now);
+            week2Date.setDate(now.getDate() + 7); // +1 week
+            const week2Year = week2Date.getFullYear();
+            const week2Num = getISOWeekNumber(week2Date);
+            
+            return {
+                week1: { year: currentYear, week: currentWeek },
+                week2: { year: week2Year, week: week2Num }
+            };
+        }
+    }
+
+    function updateNavigationButtons() {
+        const prevBtn = document.getElementById('prev-week-btn');
+        const nextBtn = document.getElementById('next-week-btn');
+        
+        if (prevBtn) {
+            prevBtn.disabled = !showingFutureWeeks;
+            if (showingFutureWeeks) {
+                prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                prevBtn.classList.add('hover:bg-slate-600/80');
+            } else {
+                prevBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                prevBtn.classList.remove('hover:bg-slate-600/80');
+            }
+        }
+        
+        if (nextBtn) {
+            nextBtn.disabled = showingFutureWeeks;
+            if (!showingFutureWeeks) {
+                nextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                nextBtn.classList.add('hover:bg-slate-600/80');
+            } else {
+                nextBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                nextBtn.classList.remove('hover:bg-slate-600/80');
+            }
+        }
+    }
+
+    function handlePrevWeek() {
+        if (showingFutureWeeks) {
+            showingFutureWeeks = false;
+            updateNavigationButtons();
+            renderFromCache(); // Instant switch using cached data
+        }
+    }
+
+    function handleNextWeek() {
+        if (!showingFutureWeeks) {
+            showingFutureWeeks = true;
+            updateNavigationButtons();
+            renderFromCache(); // Instant switch using cached data
+        }
+    }
+
+    // Date utility functions
+    function getISOWeekNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+    }
+
+    function getMondayFromWeekNumberAndYear(year, weekNumber) {
+        const simple = new Date(year, 0, 1 + (weekNumber - 1) * 7);
+        const dayOfWeek = simple.getDay(); 
+        const isoMonday = new Date(simple);
+        isoMonday.setDate(simple.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)); // 0 is Sunday
+        return isoMonday;
+    }
+
+    function formatMonthDay(date) {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return monthNames[date.getMonth()] + " " + date.getDate();
+    }
+  </script>

@@ -1,0 +1,136 @@
+<script>
+/**
+ * User Profile Component (grid-cell-top-left)
+ * This is the full, corrected version with a functional modal that
+ * populates user data, displays the base64 helper image, and saves changes.
+ */
+const UserProfile = (function() {
+  let _panel, _displayName, _role, _editBtn, _userContext;
+
+  // --- This function handles the form submission ---
+  function _onProfileSave(event) {
+    event.preventDefault(); // Prevent the form from reloading the page
+    const modal = document.getElementById('profile-editor-modal');
+    const form = document.getElementById('profile-editor-form');
+    const messageEl = document.getElementById('profile-form-message');
+    const saveBtn = document.getElementById('save-profile-btn');
+    
+    const newDisplayName = form.displayName.value;
+    const newDiscordUsername = form.discordUsername.value;
+
+    saveBtn.disabled = true;
+    messageEl.textContent = 'Saving...';
+    messageEl.className = 'mt-4 text-xs text-sky-400';
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        saveBtn.disabled = false;
+        if (response.success) {
+            messageEl.textContent = 'Profile saved successfully!';
+            messageEl.className = 'mt-4 text-xs text-green-400';
+            
+            // On success, update the main App's user context and all components
+            if (typeof App.refreshUserContext === 'function') {
+                App.refreshUserContext();
+            }
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 1500);
+        } else {
+            messageEl.textContent = `Error: ${response.message}`;
+            messageEl.className = 'mt-4 text-xs text-red-400';
+        }
+      })
+      .withFailureHandler(function(error) {
+        saveBtn.disabled = false;
+        messageEl.textContent = `Error: ${error.message}`;
+        messageEl.className = 'mt-4 text-xs text-red-400';
+      })
+      .updateMyProfile({
+        displayName: newDisplayName,
+        discordUsername: newDiscordUsername
+      });
+  }
+
+/**
+ * REPLACEMENT for _onEditClick in UserProfile.js.html
+ * This version uses the ImageService "proxy" to fetch the helper image
+ * from Google Drive instead of using a hardcoded base64 string.
+ */
+/**
+ * REPLACEMENT for _onEditClick in UserProfile.js.html
+ * This version uses the ImageService "proxy" to fetch the helper image
+ * from Google Drive instead of using a hardcoded base64 string.
+ */
+function _onEditClick() {
+    const modal = document.getElementById('profile-editor-modal');
+    const form = document.getElementById('profile-editor-form');
+    const cancelBtn = document.getElementById('cancel-profile-btn');
+    const helpImage = document.getElementById('discord-info-image');
+
+    if (!modal || !form || !cancelBtn || !helpImage) {
+        console.error("Profile editor modal elements not found in HTML.");
+        return;
+    }
+
+    // Populate the form with the current user's data
+    if (_userContext) {
+        form.displayName.value = _userContext.displayName || '';
+        form.discordUsername.value = _userContext.discordUsername || '';
+    }
+    
+    // --- THIS IS THE NEW LOGIC (confirmed working core) ---
+    // Fetch the helper image using our ImageService proxy.
+    // window.BLOCK_CONFIG_CLIENT should now be reliably available.
+    const imageUrl = window.BLOCK_CONFIG_CLIENT?.WEB_APP?.DISCORD_HELP_IMAGE_URL;
+    if (imageUrl) {
+        google.script.run
+            .withSuccessHandler(function(response) {
+                if (response.success && response.imageBase64) {
+                    helpImage.src = `data:${response.mimeType};base64,${response.imageBase64}`;
+                } else if (response.success && response.directUrl) { // Fallback if backend returns a direct URL
+                    helpImage.src = response.directUrl;
+                }
+            })
+            .withFailureHandler(function(error) {
+                console.error("UserProfile: Backend call to getDriveImageAsBase64 failed:", error);
+                // Optionally set a fallback image or show an error to the user
+                helpImage.src = "https://via.placeholder.com/100x50?text=Error"; // Generic error placeholder
+            })
+            .getDriveImageAsBase64(imageUrl);
+    } else {
+        console.error("UserProfile: DISCORD_HELP_IMAGE_URL not found in client config.");
+        helpImage.src = "https://via.placeholder.com/100x50?text=Config+Missing"; // Config error placeholder
+    }
+    // --- END OF NEW LOGIC ---
+
+    document.getElementById('profile-form-message').textContent = '';
+    form.onsubmit = _onProfileSave;
+    cancelBtn.onclick = () => modal.classList.add('hidden');
+    modal.classList.remove('hidden');
+}
+
+  function init(panelId) {
+    _panel = document.getElementById(panelId);
+    if (!_panel) return;
+
+    _displayName = _panel.querySelector('#user-profile-display-name');
+    _role = _panel.querySelector('#user-profile-role');
+    _editBtn = _panel.querySelector('#edit-profile-btn');
+
+    _editBtn.addEventListener('click', _onEditClick);
+    console.log("UserProfile Component Initialized.");
+  }
+
+  function update(userData) {
+    if (!userData) return;
+    _userContext = userData; // Store the latest user context
+    _displayName.textContent = userData.displayName || 'Player';
+    // Format the role for display (e.g., 'team_leader' -> 'Team Leader')
+    _role.textContent = (userData.role || 'Guest').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  return { init, update };
+})();
+</script>

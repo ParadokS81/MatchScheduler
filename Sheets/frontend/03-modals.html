@@ -1,0 +1,154 @@
+<!--
+ * Schedule Manager - Frontend Modals
+ *
+ * @version 1.2.0 (2025-06-08) - Added Team Roster Modal for Browse All Teams functionality
+ * @version 1.1.0 (2025-06-07) - Updated to numbered filename for proper sorting order.
+ * @version 1.0.0 (2025-06-07) - Extracted from monolithic index.html for better organization.
+ *
+ * Purpose: Modal dialogs for Save/Load availability templates and team roster display
+ * Dependencies: CSS styles from 01-head-content.html
+ * Provides: Save Template Modal, Load Template Modal, Team Roster Modal DOM structures
+ * Requires: Template functions from 03-templates.html for functionality
+-->
+<div id="save-template-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-slate-800 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold text-sky-400 mb-4">Save Availability Template</h3>
+      <p class="text-slate-300 mb-4">Which week would you like to save as your template?</p>
+      
+      <div class="space-y-3 mb-6">
+        <label class="flex items-center">
+          <input type="radio" name="save-week" value="week1" class="mr-3">
+          <span id="save-week1-label" class="text-slate-200">Week X</span>
+        </label>
+        <label class="flex items-center">
+          <input type="radio" name="save-week" value="week2" class="mr-3">
+          <span id="save-week2-label" class="text-slate-200">Week Y</span>
+        </label>
+      </div>
+      
+      <div class="flex gap-3">
+        <button id="save-template-confirm" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded flex-1">Save Template</button>
+        <button id="save-template-cancel" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded flex-1">Cancel</button>
+      </div>
+      
+      <div id="save-template-message" class="mt-3 text-sm"></div>
+    </div>
+  </div>
+
+  <div id="load-template-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-slate-800 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold text-sky-400 mb-4">Load Availability Template</h3>
+      <p class="text-slate-300 mb-4">Select which weeks to apply your template to:</p>
+      
+      <div class="space-y-3 mb-6">
+        <label class="flex items-center">
+          <input type="checkbox" id="load-week1-checkbox" class="mr-3">
+          <span id="load-week1-label" class="text-slate-200">Week X</span>
+        </label>
+        <label class="flex items-center">
+          <input type="checkbox" id="load-week2-checkbox" class="mr-3">
+          <span id="load-week2-label" class="text-slate-200">Week Y</span>
+        </label>
+      </div>
+      
+      <div class="flex gap-3">
+        <button id="load-template-confirm" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded flex-1">Load Template</button>
+        <button id="load-template-cancel" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded flex-1">Cancel</button>
+      </div>
+      
+      <div id="load-template-message" class="mt-3 text-sm"></div>
+    </div>
+  </div>
+
+  <div id="team-roster-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-slate-800 p-6 rounded-lg shadow-xl max-w-lg w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-semibold text-sky-400">Team Roster & Contact</h3>
+        <button id="team-roster-close" class="text-slate-400 hover:text-slate-200 transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div id="team-roster-loading" class="text-center py-8">
+        <svg class="animate-spin h-8 w-8 text-sky-500 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-slate-300">Loading team roster...</p>
+      </div>
+      
+      <div id="team-roster-content" class="hidden">
+        <div id="team-roster-header" class="flex items-center space-x-3 mb-6 p-4 bg-slate-700/30 rounded-lg">
+          <img id="team-roster-logo" src="" alt="Team logo" class="w-12 h-12 rounded object-cover bg-slate-600">
+          <div>
+            <h4 id="team-roster-name" class="text-lg font-semibold text-slate-100"></h4>
+            <p id="team-roster-division" class="text-sm text-slate-400"></p>
+          </div>
+        </div>
+        
+        <div id="team-roster-leader" class="mb-6 p-4 bg-sky-900/20 border border-sky-700/50 rounded-lg">
+          <h5 class="text-sm font-semibold text-sky-400 mb-2 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Team Leader
+          </h5>
+          <div id="team-roster-leader-info">
+            <p id="team-roster-leader-name" class="text-slate-200 font-medium"></p>
+            <p id="team-roster-leader-initials" class="text-sky-300 font-mono text-sm"></p>
+            <div id="team-roster-leader-contact" class="mt-2 space-y-1 text-sm text-slate-300">
+              </div>
+          </div>
+        </div>
+        
+        <div>
+          <h5 class="text-sm font-semibold text-slate-300 mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.196-2.121M9 12a4 4 0 008 0m-8 0a4 4 0 118 0m-8 0v8a2 2 0 002 2h4a2 2 0 002-2v-8"/>
+            </svg>
+            All Team Members
+          </h5>
+          <div id="team-roster-members" class="space-y-2">
+            </div>
+        </div>
+      </div>
+      
+      <div id="team-roster-error" class="hidden text-center py-8">
+        <svg class="w-12 h-12 text-red-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-red-400 font-medium">Failed to load team roster</p>
+        <p id="team-roster-error-message" class="text-slate-400 text-sm mt-1"></p>
+      </div>
+    </div>
+  </div>
+<div id="profile-editor-modal" class="fixed inset-0 bg-slate-900 bg-opacity-75 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+  <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 w-full max-w-md p-6 m-4">
+    <form id="profile-editor-form">
+      <h2 class="text-2xl font-bold text-sky-400 mb-4">Edit My Global Profile</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="profile-display-name" class="block text-sm font-medium text-slate-300 mb-1">Display Name</label>
+          <input type="text" id="profile-display-name" name="displayName" class="form-input" required>
+        </div>
+        <div>
+          <label for="profile-discord-username" class="block text-sm font-medium text-slate-300 mb-1">Discord Username</label>
+          <input type="text" id="profile-discord-username" name="discordUsername" class="form-input" placeholder="e.g., username">
+          <p class="text-xs text-slate-500 mt-1">Your unique, discriminator-less Discord username. See example:</p>
+          <div class="mt-2 rounded-md border border-slate-600 overflow-hidden">
+             <img id="discord-info-image" src="" alt="Discord username help image" class="block">
+          </div>
+        </div>
+      </div>
+      
+      <div id="profile-form-message" class="mt-4 text-xs"></div>
+
+      <div class="mt-6 flex justify-end space-x-3">
+        <button type="button" id="cancel-profile-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2 px-4 rounded transition-colors">Cancel</button>
+        <button type="submit" id="save-profile-btn" class="form-button py-2 px-4">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>

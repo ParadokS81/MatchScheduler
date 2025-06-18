@@ -1,0 +1,137 @@
+<script>
+/**
+ * Week Navigation Component (grid-cell-top-center)
+ * Handles Previous/Next week buttons and updates week displays.
+ * V3 - Fixed to show week headers and limit navigation to cached weeks only
+ */
+const WeekNavigation = (function() {
+  let _panel, _prevBtn, _nextBtn, _week1Display, _week2Display;
+
+function _onPrevClick() {
+    GridSelectionService.clear(); // ADD THIS LINE
+    App.requestWeekChange('prev');
+}
+
+function _onNextClick() {
+    GridSelectionService.clear(); // ADD THIS LINE
+    App.requestWeekChange('next');
+}
+
+  function init(panelId) {
+    _panel = document.getElementById(panelId);
+    if (!_panel) {
+        console.error("WeekNavigation.init: Panel #" + panelId + " not found.");
+        return;
+    }
+
+    // Find the elements
+    _prevBtn = _panel.querySelector('#prev-week-btn');
+    _nextBtn = _panel.querySelector('#next-week-btn');
+    _week1Display = _panel.querySelector('#current-week-display-1');
+    _week2Display = _panel.querySelector('#current-week-display-2');
+
+    // Attach listeners
+    if (_prevBtn) {
+      _prevBtn.addEventListener('click', _onPrevClick);
+    } else {
+      console.warn("WeekNavigation.init: Previous button #prev-week-btn not found.");
+    }
+
+    if (_nextBtn) {
+      _nextBtn.addEventListener('click', _onNextClick);
+    } else {
+      console.warn("WeekNavigation.init: Next button #next-week-btn not found.");
+    }
+    
+    console.log("WeekNavigation Component Initialized.");
+  }
+
+  /**
+   * Updates the week display with proper date ranges
+   * @param {Object} weekInfo - Contains week data and navigation state
+   */
+  function updateDisplay(weekInfo) {
+    // Update week displays with formatted text
+    if (_week1Display && weekInfo.week1Data) {
+      const week1Text = _formatWeekDisplay(weekInfo.week1Data);
+      _week1Display.textContent = week1Text;
+    }
+    
+    if (_week2Display && weekInfo.week2Data) {
+      const week2Text = _formatWeekDisplay(weekInfo.week2Data);
+      _week2Display.textContent = week2Text;
+    }
+    
+    // Update button states - CRITICAL for preventing server calls
+    if (_prevBtn) {
+      _prevBtn.disabled = !weekInfo.canGoPrev;
+      _prevBtn.style.opacity = weekInfo.canGoPrev ? '1' : '0.5';
+      _prevBtn.style.cursor = weekInfo.canGoPrev ? 'pointer' : 'not-allowed';
+    }
+    
+    if (_nextBtn) {
+      _nextBtn.disabled = !weekInfo.canGoNext;
+      _nextBtn.style.opacity = weekInfo.canGoNext ? '1' : '0.5';
+      _nextBtn.style.cursor = weekInfo.canGoNext ? 'pointer' : 'not-allowed';
+    }
+  }
+
+  /**
+   * Formats the week display text with date range
+   * @param {Object} weekData - Week data from cache
+   * @return {string} Formatted week display text
+   */
+  function _formatWeekDisplay(weekData) {
+    if (!weekData) return 'No Data';
+    
+    // Get the Monday of the week
+    const monday = _getMondayFromWeekNumber(weekData.year, weekData.weekNumber);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    // Format the dates
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const startMonth = monthNames[monday.getMonth()];
+    const endMonth = monthNames[sunday.getMonth()];
+    const startDay = monday.getDate();
+    const endDay = sunday.getDate();
+    
+    // Build the display textreturn {
+    let dateRange;
+    if (monday.getMonth() === sunday.getMonth()) {
+      // Same month
+      dateRange = `${startMonth} ${startDay} - ${endDay}`;
+    } else {
+      // Different months
+      dateRange = `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+    }
+    
+    return `Week ${weekData.weekNumber}: ${dateRange}`;
+  }
+
+  /**
+   * Gets Monday date from week number and year
+   * @param {number} year - Year
+   * @param {number} weekNumber - ISO week number
+   * @return {Date} Monday of that week
+   */
+  function _getMondayFromWeekNumber(year, weekNumber) {
+    // This matches the backend logic
+    const jan4 = new Date(year, 0, 4);
+    const dayOfWeek = jan4.getDay() || 7;
+    const daysToMonday = 1 - dayOfWeek;
+    const firstMonday = new Date(jan4);
+    firstMonday.setDate(jan4.getDate() + daysToMonday);
+    
+    const targetMonday = new Date(firstMonday);
+    targetMonday.setDate(firstMonday.getDate() + (weekNumber - 1) * 7);
+    
+    return targetMonday;
+  }
+
+  // In App.js, make sure these are in the public return statement:
+return { init, updateDisplay };
+})();
+</script>
