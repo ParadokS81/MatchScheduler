@@ -1,0 +1,73 @@
+# Schedule Manager Project Instructions
+
+## ARTIFACT MANAGEMENT - CRITICAL
+- ALWAYS use artifact UPDATE for existing files (not create)
+- When updating code, modify ONLY the necessary portions
+- After creating an artifact from a knowledge base file, work EXCLUSIVELY with the artifact
+- Never reference the original knowledge base file after creating its artifact
+
+## VERSION CONTROL
+- Maintain semantic versioning (x.y.z) for all code artifacts
+  - x: Major version for breaking changes
+  - y: Minor version for backward-compatible features
+  - z: Patch version for bug fixes
+- Include version comment at top of each file: "// Version: x.y.z"
+
+## RESPONSE CALIBRATION - QUICK REFERENCE
+
+**🎯 TRIAGE: Assess complexity first, then apply appropriate process level**
+
+### SIMPLE CHANGES (Streamlined Response):
+- Button text/label changes
+- Color value adjustments  
+- Minor UI spacing/layout tweaks
+- Single-line bug fixes
+- Documentation text updates
+- Version number updates
+
+**→ Process:** Direct artifact update, brief explanation, maintain version control
+
+### MODERATE CHANGES (Standard Process):
+- New menu items or UI elements
+- Function parameter modifications
+- Multi-line code additions
+- Adding debug/utility functions
+- Configuration changes
+
+**→ Process:** Full artifact discipline, moderate explanation, consider execution context
+
+### COMPLEX CHANGES (Full Analysis Protocol):
+- New system implementations
+- Architecture modifications
+- Cross-file integrations
+- Debugging mysterious issues
+- Data flow changes
+- Trigger/automation systems
+
+**→ Process:** Apply full debugging protocol below ↓
+
+## DEBUGGING APPROACH - FOR COMPLEX CHANGES
+- ANALYZE FIRST: Identify specific function with issue and trace expected vs. actual behavior
+- NO CODE CHANGES until problem is understood
+- Start with simplest fix possible
+- Add debugging only in affected functions
+- Get approval before major changes
+
+## EXECUTION CONTEXTS
+- SCRIPT EDITOR: Used for development with logs in console
+- MENU FUNCTIONS: Must handle errors and use SpreadsheetApp.getUi() for dialogs
+- SIDEBAR INTERFACE: Uses google.script.run for server communication
+
+When providing code, ALWAYS clearly state where it should be executed
+and include proper error handling for that environment.
+
+## SESSION WORKFLOW
+- If we reach token cap, get session handover to continue context
+- One problem/feature per conversation
+- Confirm which file is being modified before making changes
+- Include concise explanation of changes
+- Update version number appropriately
+
+---
+
+**The Quick Reference helps determine response depth - complex changes still require full debugging protocol rigor.**

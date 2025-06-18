@@ -1,0 +1,33 @@
+Top 10 Core Project Files
+Configuration.js
+
+Reason: This is the project's foundation. It contains the master BLOCK_CONFIG object which defines the "database" schema, layouts, and system-wide settings that nearly every other file depends on.
+PermissionManager.js
+
+Reason: As the security core, this file is non-negotiable. It defines all ROLES and PERMISSIONS and its userHasPermission() function is the gatekeeper for all sensitive operations.
+
+WebAppController.js
+
+Reason: This is the primary entry point for the entire web application. It handles all google.script.run calls from the frontend and serves the initial HTML, making it the central hub for client-server communication.
+TeamDataManager.js
+
+Reason: This file represents the core business logic for one of the two primary data models (Teams). It manages the creation, retrieval, and lifecycle of teams, which is a fundamental aspect of the application.
+PlayerDataManager.js
+
+Reason: This complements TeamDataManager.js by managing the other primary data model (Players). It handles user profiles, and more importantly, the critical logic of team membership (joinTeamByCode, leaveTeam).
+AvailabilityManager.js
+
+Reason: This file manages the application's single most important feature: player availability. It contains the logic for updating the grids and retrieving schedule data, which is the core purpose of the tool.
+WeekBlockManager.js
+
+Reason: This file is the bridge between logical data and physical storage. It handles the creation and reading of the weekly data blocks on the Google Sheet, abstracting the "database" layout from the rest of the application. The AvailabilityManager depends directly on it.
+CellProtection.js
+
+Reason: This file represents a critical piece of the application's infrastructure. The withProtectionBypass() function is the mechanism that enables all safe data write operations, making it fundamental to the app's integrity and security model.
+
+index.html
+
+Reason: This file represents the frontend's architecture. It demonstrates how the application is assembled from partials using include() and how server-side data is injected into the client-side environment, which is a core pattern of the project.
+02d-schedule-availability.html
+
+Reason: Of all the frontend script files, this one is the most representative of the core user-facing functionality. It contains the logic for loadTeamSchedule and the handleAvailabilityUpdate pipeline, showing exactly how the client-side interacts with the backend to read and write the primary data.

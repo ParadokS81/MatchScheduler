@@ -1,0 +1,130 @@
+# ===================================================================
+# Custom Rules for Match Scheduler Pro Project
+# ===================================================================
+
+# Ignore Google Apps Script credentials from the old project
+Sheets/MatchScheduler/.clasp.json
+
+
+# ===================================================================
+# Firebase Specific Rules
+# ===================================================================
+
+# Firebase cache and debug logs
+.firebase
+firebase-debug.log*
+firebase-debug.*.log*
+
+# Firebase config - It's good practice to share .firebaserc in a team
+# so everyone deploys to the same project. Uncomment if you want each
+# collaborator to set up their own project link.
+# .firebaserc
+
+# Dataconnect generated files
+.dataconnect
+
+
+# ===================================================================
+# General Node.js / Web Development Rules (Comprehensive)
+# ===================================================================
+
+# Dependency directories
+node_modules/
+functions/node_modules/
+Firebase/MatchScheduler/functions/node_modules/
+jspm_packages/
+web_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Build output & caches
+dist
+out
+build/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist
+.temp/
+.docusaurus/
+.serverless/
+.fusebox/
+.dynamodb/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional IDE & Editor directories
+.vscode/
+.vscode-test/
+.tern-port
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file & cache
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Coverage directory
+coverage
+*.lcov
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
