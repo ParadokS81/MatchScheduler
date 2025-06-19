@@ -1,7 +1,7 @@
 REM ===== Push-To-GitHub.bat =====
 @echo off
-rem Change to the MatchScheduler project directory
-cd /d "%~dp0\MatchScheduler"
+rem Change to the MatchScheduler project directory (remove the extra \MatchScheduler)
+cd /d "%~dp0"
 echo Staging all changes for commit...
 git add .
 echo Committing with timestamp...
