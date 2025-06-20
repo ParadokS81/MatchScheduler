@@ -18,7 +18,7 @@ The goal is not to be a full-fledged tournament platform, but to do one thing pe
 
 ## Core Features
 
-- **Visual Availability Grid:** Set and view availability for the week at a glance.
+- **Visual Availability Grid:** Set and view availability for 2 weeks at a glance.
 - **Team Management:** Create a team, invite players with a simple code, and manage your roster.
 - **Availability Comparison:** The key feature! Select an opponent (or multiple) and instantly see all the time slots where both teams have enough players to start a match.
 - **Discord & Google Login:** Simple and secure authentication for easy onboarding.
