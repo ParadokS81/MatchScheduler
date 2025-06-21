@@ -77,17 +77,7 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       }
 
       // 8. Generate unique join code
-      let joinCode;
-      let isCodeUnique = false;
-      while (!isCodeUnique) {
-        joinCode = generateJoinCode();
-        const existingCode = await transaction.get(
-          db.collection('teams')
-            .where('joinCode', '==', joinCode)
-            .where('status', '==', 'active')
-        );
-        isCodeUnique = existingCode.empty;
-      }
+      const joinCode = generateJoinCode();
 
       const teamRef = db.collection('teams').doc();
       const now = admin.firestore.FieldValue.serverTimestamp();
