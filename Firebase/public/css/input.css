@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for grid selection */
+.cell-selected {
+  background-color: rgba(56, 189, 248, 0.3) !important;
+  border-color: rgb(56, 189, 248) !important;
+  box-shadow: inset 0 0 0 1px rgb(56, 189, 248);
+}
+
+/* Prevent text selection during drag */
+.availability-cell, .time-label, .day-header-full {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+} 

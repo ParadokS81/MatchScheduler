@@ -1,229 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Match Scheduler - Join a Team</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; /* slate-900 */ }
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    * { scrollbar-width: thin; scrollbar-color: #334155 #1e293b; }
-    .form-input {
-        background-color: #334155; /* slate-700 */
-        border: 1px solid #475569; /* slate-600 */
-        color: #e2e8f0; /* slate-200 */
-        border-radius: 0.375rem;
-        padding: 0.75rem 1rem;
-        width: 100%;
-        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    }
-    .form-input:focus {
-        border-color: #0ea5e9; /* sky-500 */
-        box-shadow: 0 0 0 1px #0ea5e9;
-        outline: none;
-    }
-    .form-button {
-        background-color: #0ea5e9; /* sky-500 */
-        color: white;
-        font-weight: 600;
-        padding: 0.75rem 1rem;
-        border-radius: 0.375rem;
-        transition: background-color 0.15s ease-in-out;
-        width: 100%;
-        border: none;
-        cursor: pointer;
-    }
-    .form-button:hover { background-color: #0284c7; /* sky-600 */ }
-    .form-button:disabled { background-color: #475569; /* slate-600 */ cursor: not-allowed; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MatchScheduler</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-functions-compat.js"></script>
+    
+    <!-- Application CSS -->
+    <link href="css/styles.css" rel="stylesheet">
+    
+    <!-- Application Config -->
+    <script src="js/config/firebase.js"></script>
+    
+    <!-- Application Services -->
+    <script type="module" src="js/services/auth.js"></script>
+    <script type="module" src="js/services/database.js"></script>
+    <script type="module" src="js/services/state.js"></script>
+    <script type="module" src="js/services/gridSelection.js"></script>
+    
+    <!-- Application Components -->
+    <script type="module" src="js/components/app.js"></script>
+    <script type="module" src="js/components/userProfile.js"></script>
+    <script type="module" src="js/components/weekNavigation.js"></script>
+    <script type="module" src="js/components/teamInfo.js"></script>
+    <script type="module" src="js/components/availabilityGrid.js"></script>
+    <script type="module" src="js/components/gridTools.js"></script>
+    <script type="module" src="js/components/favoritesList.js"></script>
+    <script type="module" src="js/components/browseTeams.js"></script>
+    <script type="module" src="js/components/modals.js"></script>
+    
+    <!-- Application Entry Point -->
+    <script type="module" src="js/main.js"></script>
 </head>
-<body class="text-slate-200">
-
-  <div id="app-container" class="min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-md w-full">
-
-      <!-- Onboarding Stage 1: Global Identity -->
-      <div id="onboarding-stage-1">
-        <div class="bg-slate-800 p-8 rounded-lg shadow-xl">
-          <h1 class="text-2xl font-bold text-white text-center mb-1">Welcome!</h1>
-          <p class="text-center text-slate-400 mb-6">Let's get you set up.</p>
-          <div class="space-y-4">
-            <div>
-              <label for="display-name" class="block text-sm font-medium text-slate-300 mb-1">Choose your Nickname</label>
-              <input type="text" id="display-name" class="form-input" placeholder="e.g., Paradoks">
-            </div>
-            <div>
-              <label for="join-code" class="block text-sm font-medium text-slate-300 mb-1">Team Join Code</label>
-              <input type="text" id="join-code" class="form-input" placeholder="Enter the code from your team leader">
-            </div>
-            <button id="continue-button" class="form-button">Continue</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Onboarding Stage 2: Team-specific details -->
-      <div id="onboarding-stage-2" class="hidden">
-        <div class="bg-slate-800 p-8 rounded-lg shadow-xl">
-          <h1 class="text-2xl font-bold text-white text-center mb-1" id="welcome-message"></h1>
-          <p class="text-center text-slate-400 mb-2" id="onboarding-stage-1-team-name"></p>
-          <p class="text-center text-slate-400 mb-6">Just one last step to join the team.</p>
-          <div class="space-y-4">
-            <div>
-              <label for="initials" class="block text-sm font-medium text-slate-300 mb-1">Choose your Team Initials</label>
-              <input type="text" id="initials" class="form-input" placeholder="2-3 letters, e.g., PA">
-            </div>
-            <button id="complete-join-button" class="form-button">Complete Join</button>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Status Messages -->
-      <div id="status-message" class="mt-4 text-center text-sm"></div>
-
+<body class="bg-gray-100">
+    <div id="app" class="min-h-screen">
+        <!-- App content will be dynamically inserted here -->
     </div>
-  </div>
-
-  <!-- Firebase SDK -->
-  <script defer src="/__/firebase/11.9.1/firebase-app-compat.js"></script>
-  <script defer src="/__/firebase/11.9.1/firebase-auth-compat.js"></script>
-  <script defer src="/__/firebase/11.9.1/firebase-functions-compat.js"></script>
-  <script defer src="/__/firebase/init.js?useEmulator=true"></script>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Firebase will be initialized here automatically by init.js
-      
-      const stage1 = document.getElementById('onboarding-stage-1');
-      const stage2 = document.getElementById('onboarding-stage-2');
-      const continueButton = document.getElementById('continue-button');
-      const completeJoinButton = document.getElementById('complete-join-button');
-      const statusMessage = document.getElementById('status-message');
-
-      const displayNameInput = document.getElementById('display-name');
-      const joinCodeInput = document.getElementById('join-code');
-      const initialsInput = document.getElementById('initials');
-      const welcomeMessage = document.getElementById('welcome-message');
-
-      let currentJoinCode = '';
-      let currentTeamName = '';
-      let functions;
-      let auth;
-
-      try {
-        // Initialize Firebase services
-        auth = firebase.auth();
-        functions = firebase.functions();
-        console.log('Firebase SDK initialized successfully.');
-
-        // Listen for auth state changes
-        auth.onAuthStateChanged(user => {
-          if (user) {
-            console.log('User is signed in:', user.uid, user.displayName);
-            // If a user is signed in, we could potentially show a different UI,
-            // but for this flow, we'll let the button clicks drive the logic.
-          } else {
-            console.log('User is signed out.');
-          }
-        });
-
-      } catch (e) {
-        console.error(e);
-        showStatus('Error loading the Firebase SDK, check the console.', 'error');
-        return;
-      }
-
-      // STAGE 1 LOGIC
-      continueButton.addEventListener('click', async () => {
-        const displayName = displayNameInput.value;
-        const joinCode = joinCodeInput.value;
-
-        if (!displayName || !joinCode) {
-          showStatus('Please fill out both your nickname and the join code.', 'error');
-          return;
-        }
-
-        continueButton.disabled = true;
-        continueButton.textContent = 'Checking...';
-        showStatus('Validating your details...', 'info');
-
-        try {
-          const startOnboarding = functions.httpsCallable('startOnboarding');
-          const result = await startOnboarding({ displayName, joinCode });
-
-          const { token, teamName } = result.data;
-
-          // Sign in with the custom token from the backend
-          await auth.signInWithCustomToken(token);
-
-          // Store details for Stage 2
-          currentJoinCode = joinCode;
-          currentTeamName = teamName;
-
-          // Proceed to Stage 2
-          welcomeMessage.textContent = `Welcome, ${displayName}!`;
-          document.getElementById('onboarding-stage-1-team-name').textContent = `You are joining: ${teamName}`;
-          stage1.classList.add('hidden');
-          stage2.classList.remove('hidden');
-          showStatus(''); // Clear status
-
-        } catch (error) {
-          console.error("Onboarding Error:", error);
-          showStatus(error.message, 'error');
-          continueButton.disabled = false;
-          continueButton.textContent = 'Continue';
-        }
-      });
-
-      // STAGE 2 LOGIC
-      completeJoinButton.addEventListener('click', async () => {
-        const initials = initialsInput.value;
-
-        if (!initials) {
-          showStatus('Please enter your initials for the team.', 'error');
-          return;
-        }
-
-        if (!auth.currentUser) {
-          showStatus('Authentication error. Please refresh and try again.', 'error');
-          return;
-        }
-
-        completeJoinButton.disabled = true;
-        completeJoinButton.textContent = 'Joining...';
-        showStatus(`Joining ${currentTeamName}...`, 'info');
-
-        try {
-          const joinTeamWithCode = functions.httpsCallable('joinTeamWithCode');
-          await joinTeamWithCode({ initials, joinCode: currentJoinCode });
-          
-          showStatus(`Successfully joined ${currentTeamName}! Welcome, ${initials}!`, 'success');
-          completeJoinButton.textContent = 'Joined!';
-          // Here you would typically redirect the user to the main app page.
-
-        } catch (error) {
-          console.error("Join Team Error:", error);
-          showStatus(error.message, 'error');
-          completeJoinButton.disabled = false;
-          completeJoinButton.textContent = 'Complete Join';
-        }
-      });
-
-      function showStatus(message, type = 'info') {
-        statusMessage.textContent = message;
-        if (type === 'error') {
-          statusMessage.className = 'mt-4 text-center text-sm text-red-400';
-        } else if (type === 'success') {
-          statusMessage.className = 'mt-4 text-center text-sm text-green-400';
-        } else {
-          statusMessage.className = 'mt-4 text-center text-sm text-slate-400';
-        }
-      }
-    });
-  </script>
-
 </body>
 </html>
