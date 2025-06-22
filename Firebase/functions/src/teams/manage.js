@@ -3,7 +3,6 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const db = admin.firestore();
 
 /**
  * Removes a player from a team. Only the team leader can remove players.
@@ -16,6 +15,8 @@ const db = admin.firestore();
  * @returns {Promise<Object>} Success response with removed player info
  */
 async function removePlayer(data, context) {
+  const db = admin.firestore();
+  
   // Check authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to remove a player.');
@@ -139,6 +140,8 @@ async function removePlayer(data, context) {
  * @returns {Promise<Object>} Success response with new leader info
  */
 async function transferLeadership(data, context) {
+  const db = admin.firestore();
+  
   // Check authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to transfer team leadership.');
@@ -279,18 +282,21 @@ async function transferLeadership(data, context) {
 }
 
 /**
- * Updates team settings (maxPlayers, divisions, teamLogoUrl).
+ * Updates team settings like name, divisions, max players, etc.
  * Only the team leader can update settings.
  * 
  * @param {Object} data Request data
  * @param {string} data.teamId The ID of the team
- * @param {number} [data.maxPlayers] Optional max players (2-50)
- * @param {string[]} [data.divisions] Optional divisions array
- * @param {string|null} [data.teamLogoUrl] Optional team logo URL (null or HTTPS URL)
+ * @param {string} [data.teamName] Optional new team name
+ * @param {string[]} [data.divisions] Optional new divisions array
+ * @param {number} [data.maxPlayers] Optional new max players (5-10)
+ * @param {string} [data.teamLogoUrl] Optional team logo URL
  * @param {Object} context Functions context containing auth info
- * @returns {Promise<Object>} Success response with updated fields
+ * @returns {Promise<Object>} Success response with updated team info
  */
 async function updateTeamSettings(data, context) {
+  const db = admin.firestore();
+  
   // Check authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to update team settings.');
@@ -308,11 +314,18 @@ async function updateTeamSettings(data, context) {
   const updates = {};
   let hasUpdates = false;
 
+  // Handle teamName
+  if ('teamName' in data) {
+    const teamName = data.teamName;
+    updates.teamName = teamName;
+    hasUpdates = true;
+  }
+
   // Handle maxPlayers
   if ('maxPlayers' in data) {
     const maxPlayers = data.maxPlayers;
-    if (!Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 50) {
-      throw new functions.https.HttpsError('invalid-argument', 'Max players must be between 2 and 50.');
+    if (!Number.isInteger(maxPlayers) || maxPlayers < 5 || maxPlayers > 10) {
+      throw new functions.https.HttpsError('invalid-argument', 'Max players must be between 5 and 10.');
     }
     updates.maxPlayers = maxPlayers;
     hasUpdates = true;
@@ -495,6 +508,8 @@ function generateJoinCode() {
  * @returns {Promise<Object>} Success response with new join code
  */
 async function regenerateJoinCode(data, context) {
+  const db = admin.firestore();
+  
   // Check authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to regenerate join code.');

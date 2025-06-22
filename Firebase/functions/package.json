@@ -6,7 +6,12 @@
   },
   "main": "src/index.js",
   "scripts": {
-    "test": "jest",
+    "test": "jest test/integration/",
+    "test:watch": "jest test/integration/ --watch",
+    "test:teams": "jest test/integration/teams.integration.test.js",
+    "test:availability": "jest test/integration/availability.integration.test.js",
+    "test:scheduled": "jest test/integration/scheduled.integration.test.js",
+    "test:integration:full": "node test/integration/runAllTests.js",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
@@ -19,7 +24,8 @@
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0",
-    "jest": "^29.0.0"
+    "jest": "^29.0.0",
+    "node-fetch": "^2.7.0"
   },
   "private": true
 }

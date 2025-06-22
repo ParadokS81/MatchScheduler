@@ -4,9 +4,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
-// Get Firestore instance
-const db = admin.firestore();
-
 /**
  * Creates a new user profile after authentication
  * @param {Object} data - Profile data
@@ -15,6 +12,8 @@ const db = admin.firestore();
  * @param {string} [data.discordUsername] - Optional Discord username
  */
 exports.createProfile = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  
   // Verify authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
@@ -75,8 +74,9 @@ exports.createProfile = functions.https.onCall(async (data, context) => {
     }
     
     // Get photo URL from auth provider
-    if (context.auth.token.picture) {
-      profileData.photoURL = context.auth.token.picture;
+    const picture = context.auth?.token?.picture;
+    if (picture) {
+      profileData.photoURL = picture;
     }
     
     // Save to Firestore
@@ -108,6 +108,8 @@ exports.createProfile = functions.https.onCall(async (data, context) => {
  * @throws {functions.https.HttpsError} On validation failure or team roster conflicts
  */
 exports.updateProfile = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  
   // Verify authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');

@@ -3,7 +3,6 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const db = admin.firestore();
 
 // Constants
 const MAX_SLOTS_PER_REQUEST = 154;  // Exactly 2 weeks (7 days × 11 slots × 2)
@@ -56,6 +55,8 @@ const isValidTimeSlot = (slot) => {
 };
 
 exports.updateAvailability = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  
   try {
     // 1. Authentication check
     if (!context.auth) {
