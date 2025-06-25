@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = admin.firestore;
 
 exports.createTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
@@ -14,7 +15,7 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
     }
 
     const userId = context.auth.uid;
-    const { teamName, divisions } = data;
+    const { teamName, divisions, maxPlayers } = data;
 
     // 2. Validate user has profile
     const userDoc = await db.collection('users').doc(userId).get();
@@ -81,14 +82,14 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       const joinCode = generateJoinCode();
 
       const teamRef = db.collection('teams').doc();
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
 
       // 9. Create team document with all required fields
       const teamData = {
         teamId: teamRef.id,
         teamName: teamName.trim(),
         leaderId: userId,
-        maxPlayers: 10,
+        maxPlayers: maxPlayers || 10,
         teamLogoUrl: null,
         divisions: divisions,
         joinCode: joinCode,
@@ -99,16 +100,17 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
         playerRoster: [{
           userId: userId,
           displayName: userData.displayName,
-          initials: userData.initials
+          initials: userData.initials,
+          role: 'leader'
         }]
       };
 
       // Create team
       transaction.set(teamRef, teamData);
 
-      // 11. Update user's teams array
+      // 11. Update user's teams array using proper Firebase method
       transaction.update(userDoc.ref, {
-        teams: admin.firestore.FieldValue.arrayUnion(teamRef.id),
+        teams: FieldValue.arrayUnion(teamRef.id),
         updatedAt: now
       });
 

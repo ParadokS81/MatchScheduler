@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MatchScheduler</title>
+    <title>Match Scheduler</title>
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -15,7 +15,7 @@
     <link href="css/styles.css" rel="stylesheet">
     
     <!-- Application Config -->
-    <script src="js/config/firebase.js"></script>
+    <script type="module" src="js/config/firebase.js"></script>
     
     <!-- Application Services -->
     <script type="module" src="js/services/auth.js"></script>
@@ -37,9 +37,105 @@
     <!-- Application Entry Point -->
     <script type="module" src="js/main.js"></script>
 </head>
-<body class="bg-gray-100">
-    <div id="app" class="min-h-screen">
-        <!-- App content will be dynamically inserted here -->
+<body class="bg-slate-900 text-white">
+    <div class="app-container">
+        <!-- Simple Header (48px fixed height) -->
+        <header class="app-header">
+            <div class="flex items-center h-12 px-4">
+                <!-- Left: Logo and Title (centered) -->
+                <div class="flex-1 flex items-center justify-center space-x-3">
+                    <img src="assets/images/default-team-logo.png" alt="Logo" class="h-8 w-8">
+                    <h1 class="text-xl font-bold text-blue-400">Match Scheduler</h1>
+                </div>
+                
+                <!-- Right: Team Switching Buttons -->
+                <div id="team-switcher" class="flex items-center space-x-2">
+                    <!-- Team buttons will be inserted here -->
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area with Sacred 3x3 Grid -->
+        <main class="main-grid">
+            <!-- Top Row (80px fixed height) -->
+            <div id="panel-top-left" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Loading...</h2>
+                </div>
+            </div>
+            <div id="panel-top-center" class="panel">
+                <div class="panel-content flex items-center justify-center">
+                    <div class="flex items-center space-x-4">
+                        <button class="text-slate-300 hover:text-white px-2">← Prev</button>
+                        <div class="text-slate-300">
+                            <span>Week 25: Jun 22 - Jun 28</span>
+                            <span class="mx-2 text-slate-400">|</span>
+                            <span>Week 26: Jun 29 - Jul 5</span>
+                        </div>
+                        <button class="text-slate-300 hover:text-white px-2">Next →</button>
+                    </div>
+                </div>
+            </div>
+            <div id="panel-top-right" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Match Filters</h2>
+                </div>
+            </div>
+
+            <!-- Middle Row (1fr - flexible height) -->
+            <div id="panel-middle-left" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Team Info</h2>
+                </div>
+            </div>
+            <div id="panel-middle-center" class="panel">
+                <div class="panel-content">
+                    <div id="availability-grid-week1" class="flex-1"></div>
+                </div>
+            </div>
+            <div id="panel-middle-right" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Favorites</h2>
+                </div>
+            </div>
+
+            <!-- Bottom Row (1fr - flexible height) -->
+            <div id="panel-bottom-left" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Grid Tools</h2>
+                </div>
+            </div>
+            <div id="panel-bottom-center" class="panel">
+                <div class="panel-content">
+                    <div id="availability-grid-week2" class="flex-1"></div>
+                </div>
+            </div>
+            <div id="panel-bottom-right" class="panel">
+                <div class="panel-content">
+                    <h2 class="text-sm font-medium text-slate-300">Browse Teams</h2>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="fixed inset-0 z-50 hidden">
+        <!-- Modals will be dynamically inserted here -->
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-40 space-y-2">
+        <!-- Toast notifications will be dynamically inserted here -->
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-30 hidden">
+        <div class="flex items-center justify-center h-full">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+                <div class="text-white text-lg">Loading...</div>
+            </div>
+        </div>
     </div>
 </body>
 </html>
