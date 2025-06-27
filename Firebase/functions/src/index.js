@@ -1,8 +1,14 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
+console.log('INDEX.JS: Before initializeApp, admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);
+
 // Initialize Firebase Admin
-admin.initializeApp();
+admin.initializeApp({
+  projectId: 'quakeworld-match-scheduler'
+});
+
+console.log('INDEX.JS: After initializeApp, admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);
 
 // Import function modules
 const { createProfile, updateProfile } = require('./auth/profile');

@@ -406,6 +406,9 @@ const Modals = (function() {
         console.log('Modals: Creating team...', teamData);
         const result = await DatabaseService.createTeam(teamData);
         
+        // Refresh user profile to get the updated teams list
+        await AuthService.refreshProfile();
+        
         // Set the newly created team as current team
         if (result.success && result.data && result.data.teamId) {
             StateService.setState('currentTeam', result.data.teamId);

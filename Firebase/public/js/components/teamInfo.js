@@ -9,6 +9,9 @@ import Modals from './modals.js';
 
 const TeamInfo = (function() {
     let panel;
+    
+    // Cache for team names to avoid showing "Team 1", "Team 2"
+    const teamNameCache = new Map();
 
     /**
      * Initialize the component
@@ -47,8 +50,16 @@ const TeamInfo = (function() {
             handleCreateTeamClick();
         } else if (target.matches('.join-team-button')) {
             handleJoinTeamClick();
-        } else if (target.matches('.join-code')) {
-            handleJoinCodeClick(target);
+        } else if (target.matches('.join-create-team-button')) {
+            handleJoinCreateTeamClick();
+        } else if (target.matches('.team-switch-btn')) {
+            handleTeamSwitchClick(target);
+        } else if (target.matches('#team-management-toggle') || target.closest('#team-management-toggle')) {
+            handleDrawerToggle();
+        } else if (target.matches('.copy-join-code-btn') || target.closest('.copy-join-code-btn')) {
+            handleCopyJoinCodeClick();
+        } else if (target.matches('.regenerate-join-code-btn')) {
+            handleRegenerateJoinCodeClick();
         }
     }
 
@@ -58,6 +69,12 @@ const TeamInfo = (function() {
      */
     function handleUserStateChange(user) {
         console.log('TeamInfo: User state changed', user ? 'signed in' : 'signed out');
+        
+        // Preload team names when user signs in
+        if (user && user.profile && user.profile.teams) {
+            preloadTeamNames(user.profile.teams);
+        }
+        
         render();
     }
 
@@ -76,6 +93,12 @@ const TeamInfo = (function() {
      */
     function handleTeamDataChange(teamData) {
         console.log('TeamInfo: Team data changed', teamData?.teamName || 'no team');
+        
+        // Cache the team name when we receive team data
+        if (teamData && teamData.id && teamData.teamName) {
+            teamNameCache.set(teamData.id, teamData.teamName);
+        }
+        
         render();
     }
 
@@ -96,17 +119,215 @@ const TeamInfo = (function() {
     }
 
     /**
-     * Handle join code click (copy to clipboard)
-     * @param {Element} target - The clicked join code element
+     * Handle join/create team button click (for second team slot)
      */
-    function handleJoinCodeClick(target) {
-        const joinCode = target.textContent.replace('Join Code: ', '');
-        navigator.clipboard.writeText(joinCode).then(() => {
-            console.log('TeamInfo: Join code copied to clipboard:', joinCode);
-            // TODO: Show toast notification
-        }).catch(err => {
-            console.error('TeamInfo: Failed to copy join code:', err);
-        });
+    function handleJoinCreateTeamClick() {
+        // For now, show create team modal - we can enhance this later with a choice dialog
+        console.log('TeamInfo: Join/Create Team button clicked');
+        Modals.showCreateTeamModal();
+    }
+
+    /**
+     * Handle team switch button click
+     * @param {Element} target - The clicked team button
+     */
+    function handleTeamSwitchClick(target) {
+        const teamId = target.dataset.teamId;
+        if (teamId && teamId !== StateService.getState('currentTeam')) {
+            console.log('TeamInfo: Switching to team:', teamId);
+            StateService.setState('currentTeam', teamId);
+        }
+    }
+
+    /**
+     * Handle drawer toggle click
+     */
+    function handleDrawerToggle() {
+        const drawer = panel.querySelector('#team-management-drawer');
+        const arrow = panel.querySelector('#team-management-arrow');
+        
+        if (!drawer || !arrow) return;
+        
+        const isOpen = drawer.classList.contains('drawer-open');
+        
+        if (isOpen) {
+            // Close drawer
+            drawer.classList.remove('drawer-open');
+            drawer.classList.add('drawer-closed');
+            arrow.style.transform = 'rotate(0deg)';
+        } else {
+            // Open drawer
+            drawer.classList.remove('drawer-closed');
+            drawer.classList.add('drawer-open');
+            arrow.style.transform = 'rotate(180deg)';
+        }
+    }
+
+    /**
+     * Handle copy join code button click
+     */
+    async function handleCopyJoinCodeClick() {
+        const teamData = StateService.getState('teamData');
+        if (!teamData || !teamData.joinCode) {
+            console.warn('TeamInfo: No join code available to copy');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(teamData.joinCode);
+            showToast('Join code copied to clipboard!', 'success');
+        } catch (error) {
+            console.warn('TeamInfo: Failed to copy join code:', error);
+            // Fallback for browsers that don't support clipboard API
+            fallbackCopyToClipboard(teamData.joinCode);
+        }
+    }
+
+    /**
+     * Handle regenerate join code button click
+     */
+    async function handleRegenerateJoinCodeClick() {
+        const teamData = StateService.getState('teamData');
+        if (!teamData) {
+            console.warn('TeamInfo: No team data available');
+            return;
+        }
+
+        try {
+            // Import database service dynamically
+            const { default: DatabaseService } = await import('../services/database.js');
+            
+            showToast('Regenerating join code...', 'info');
+            
+            await DatabaseService.regenerateJoinCode({ teamId: teamData.id });
+            showToast('Join code regenerated successfully!', 'success');
+        } catch (error) {
+            console.error('TeamInfo: Failed to regenerate join code:', error);
+            showToast('Failed to regenerate join code. Please try again.', 'error');
+        }
+    }
+
+    /**
+     * Fallback method to copy text to clipboard
+     * @param {string} text - Text to copy
+     */
+    function fallbackCopyToClipboard(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showToast('Join code copied to clipboard!', 'success');
+        } catch (error) {
+            console.warn('TeamInfo: Fallback copy failed:', error);
+            showToast('Failed to copy join code', 'error');
+        } finally {
+            document.body.removeChild(textArea);
+        }
+    }
+
+    /**
+     * Show toast notification
+     * @param {string} message - Message to show
+     * @param {string} type - Type of toast (success, error, info)
+     */
+    function showToast(message, type = 'info') {
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-white text-sm font-medium transition-opacity duration-300 ${
+            type === 'success' ? 'bg-green-600' :
+            type === 'error' ? 'bg-red-600' :
+            'bg-blue-600'
+        }`;
+        toast.textContent = message;
+        
+        // Add to page
+        document.body.appendChild(toast);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                if (document.body.contains(toast)) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    /**
+     * Fetch and cache team name
+     * @param {string} teamId - Team ID to fetch name for
+     * @returns {Promise<string>} Team name
+     */
+    async function fetchAndCacheTeamName(teamId) {
+        // Handle both string IDs and team objects
+        let actualTeamId;
+        if (typeof teamId === 'string') {
+            actualTeamId = teamId;
+        } else if (teamId && teamId.id) {
+            actualTeamId = teamId.id;
+        } else {
+            console.warn('TeamInfo: Invalid teamId passed to fetchAndCacheTeamName:', teamId);
+            return 'Unknown Team';
+        }
+        
+        // Check cache first
+        if (teamNameCache.has(actualTeamId)) {
+            return teamNameCache.get(actualTeamId);
+        }
+        
+        try {
+            // Import database service dynamically to avoid circular dependencies
+            const { default: DatabaseService } = await import('../services/database.js');
+            const teamDoc = await DatabaseService.getTeam(actualTeamId);
+            
+            if (teamDoc && teamDoc.teamName) {
+                teamNameCache.set(actualTeamId, teamDoc.teamName);
+                return teamDoc.teamName;
+            } else {
+                // Fallback if team not found
+                const fallbackName = `Team ${actualTeamId.slice(-4)}`;
+                teamNameCache.set(actualTeamId, fallbackName);
+                return fallbackName;
+            }
+        } catch (error) {
+            console.warn('TeamInfo: Failed to fetch team name for', actualTeamId, error);
+            const fallbackName = `Team ${actualTeamId.slice(-4)}`;
+            teamNameCache.set(actualTeamId, fallbackName);
+            return fallbackName;
+        }
+    }
+
+    /**
+     * Preload team names for user's teams
+     * @param {Array} teamIds - Array of team IDs to preload
+     */
+    async function preloadTeamNames(teamIds) {
+        if (!teamIds || teamIds.length === 0) return;
+        
+        // Filter out any invalid team IDs and convert objects to strings
+        const validTeamIds = teamIds
+            .map(teamId => typeof teamId === 'string' ? teamId : (teamId && teamId.id ? teamId.id : null))
+            .filter(teamId => teamId !== null);
+        
+        if (validTeamIds.length === 0) return;
+        
+        try {
+            const promises = validTeamIds.map(teamId => fetchAndCacheTeamName(teamId));
+            await Promise.all(promises);
+            
+            // Re-render after caching names
+            render();
+        } catch (error) {
+            console.warn('TeamInfo: Error preloading team names:', error);
+        }
     }
 
     /**
@@ -119,25 +340,325 @@ const TeamInfo = (function() {
         const currentTeam = StateService.getState('currentTeam');
         const teamData = StateService.getState('teamData');
 
-        // Show team management buttons if:
-        // 1. User is not signed in (guest state), OR
-        // 2. User is signed in but has no current team
-        if (!user || (user && !currentTeam)) {
-            renderTeamManagementButtons(user);
+        // Show team management buttons if user is not signed in
+        if (!user) {
+            renderGuestState();
             return;
         }
 
-        // Show team display if user has a team
-        if (user && currentTeam && teamData) {
-            renderTeamDisplay(teamData, user);
+        // Always show team switcher layout for signed-in users
+        renderTeamSwitcherLayout(user, currentTeam, teamData);
+    }
+
+    /**
+     * Render guest state (not signed in)
+     */
+    function renderGuestState() {
+        panel.innerHTML = `
+            <div class="panel-content">
+                <div class="text-center space-y-4">
+                    <h2 class="text-sm font-medium text-slate-300">Team Management</h2>
+                    <p class="text-xs text-slate-400">Sign in to create or join a team</p>
+                    
+                    <div class="space-y-3">
+                        <button class="create-team-button w-full px-4 py-2 bg-gray-600 cursor-not-allowed text-white text-sm font-medium rounded-lg" disabled>
+                            Create a Team
+                        </button>
+                        
+                        <button class="join-team-button w-full px-4 py-2 bg-gray-600 cursor-not-allowed text-white text-sm font-medium rounded-lg" disabled>
+                            Join a Team
+                        </button>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500">
+                        Teams help organize matches and track availability
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render team switcher layout for signed-in users
+     * @param {Object} user - Current user data
+     * @param {string|null} currentTeam - Current team ID
+     * @param {Object|null} teamData - Current team data
+     */
+    function renderTeamSwitcherLayout(user, currentTeam, teamData) {
+        const userTeams = user.profile?.teams || [];
+        const team1 = userTeams[0] || null;
+        const team2 = userTeams[1] || null;
+        
+        // If user has no teams, show the join/create state
+        if (!team1) {
+            renderNoTeamsState();
             return;
+        }
+        
+        // Set currentTeam to team1 if no team is currently selected
+        if (!currentTeam && team1) {
+            // Ensure we're setting a string ID, not an object
+            const teamId = typeof team1 === 'string' ? team1 : team1.id;
+            StateService.setState('currentTeam', teamId);
+            return; // Will re-render with the team selected
+        }
+        
+        // Trigger team name loading for any teams that aren't cached
+        const teamsToLoad = [team1, team2].filter(teamId => {
+            if (!teamId) return false;
+            const actualTeamId = typeof teamId === 'string' ? teamId : teamId.id;
+            return actualTeamId && !teamNameCache.has(actualTeamId) && actualTeamId !== currentTeam;
+        });
+        
+        if (teamsToLoad.length > 0) {
+            // Load team names asynchronously and re-render when done
+            Promise.all(teamsToLoad.map(teamId => fetchAndCacheTeamName(teamId)))
+                .then(() => render())
+                .catch(error => console.warn('Failed to load team names:', error));
+        }
+        
+        // Get team names for buttons
+        const getTeamName = (teamId) => {
+            if (!teamId) return 'Unknown Team';
+            
+            // Ensure we're working with a string ID
+            const actualTeamId = typeof teamId === 'string' ? teamId : teamId.id;
+            if (!actualTeamId) return 'Unknown Team';
+            
+            // If this is the current team and we have team data, use it
+            if (actualTeamId === currentTeam && teamData && teamData.teamName) {
+                return teamData.teamName;
+            }
+            
+            // Check cache for team name
+            if (teamNameCache.has(actualTeamId)) {
+                return teamNameCache.get(actualTeamId);
+            }
+            
+            // Fallback while loading
+            return `Loading...`;
+        };
+
+        panel.innerHTML = `
+            <div class="panel-content relative">
+                <!-- Team Switcher Buttons -->
+                <div class="flex space-x-1 mb-3">
+                    <button class="team-switch-btn flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                        team1 && (typeof team1 === 'string' ? team1 : team1.id) === currentTeam 
+                            ? 'bg-primary text-white' 
+                            : team1 
+                                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
+                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }" ${team1 ? `data-team-id="${typeof team1 === 'string' ? team1 : team1.id}"` : 'disabled'}>
+                        ${team1 ? getTeamName(team1) : 'Team 1'}
+                    </button>
+                    
+                    <button class="team-switch-btn flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                        team2 && (typeof team2 === 'string' ? team2 : team2.id) === currentTeam 
+                            ? 'bg-primary text-white' 
+                            : team2 
+                                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
+                                : 'bg-primary hover:bg-primary/90 text-white join-create-team-button'
+                    }" ${team2 ? `data-team-id="${typeof team2 === 'string' ? team2 : team2.id}"` : ''}>
+                        ${team2 ? getTeamName(team2) : 'Join/Create'}
+                    </button>
+                </div>
+
+                ${currentTeam && teamData ? renderTeamContent(teamData, user) : renderLoadingState()}
+            </div>
+        `;
+    }
+
+    /**
+     * Render team content when a team is selected
+     * @param {Object} teamData - Team data
+     * @param {Object} user - Current user data
+     */
+    function renderTeamContent(teamData, user) {
+        const roster = teamData.playerRoster || [];
+        const logoUrl = teamData.teamLogoUrl || '/assets/images/default-team-logo.png';
+        
+        return `
+            <!-- Team Logo - Takes more vertical space -->
+            <div class="flex justify-center items-center mb-3" style="height: 45%;">
+                <img src="${logoUrl}" alt="${teamData.teamName} logo" 
+                     class="max-w-full max-h-full rounded-lg object-cover bg-slate-700 border border-slate-600"
+                     style="width: auto; height: auto; max-width: 100%; max-height: 100%;"
+                     onerror="this.src='/assets/images/default-team-logo.png'">
+            </div>
+
+            <!-- Roster List - Takes remaining space -->
+            <div class="flex-1 overflow-y-auto" style="height: 40%;">
+                <div class="space-y-1">
+                    ${roster.map(player => `
+                        <div class="flex items-center space-x-2 py-1 px-2 bg-slate-800 rounded text-xs">
+                            <!-- Avatar Placeholder -->
+                            <div class="w-4 h-4 rounded-full bg-slate-600 flex-shrink-0 flex items-center justify-center">
+                                <img src="/assets/images/default-team-logo.png" alt="Avatar" 
+                                     class="w-3 h-3 rounded-full object-cover opacity-60"
+                                     onerror="this.style.display='none'">
+                            </div>
+                            
+                            <!-- Player Info -->
+                            <div class="flex-1 min-w-0">
+                                <div class="text-slate-200 truncate">${player.displayName}</div>
+                            </div>
+                            
+                            <!-- Initials -->
+                            <div class="text-slate-400 font-mono">${player.initials}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                ${roster.length === 0 ? `
+                    <div class="text-center py-4">
+                        <p class="text-xs text-slate-400">No players in roster</p>
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- Team Management Drawer -->
+            <div id="team-management-drawer" class="absolute left-0 right-0 bottom-0 bg-slate-800 border border-slate-600 rounded-t-lg drawer-closed transition-transform duration-300 ease-out z-30 overflow-hidden"
+                 style="top: 2.5rem;">
+                
+                <!-- Drawer Header (Always Visible) -->
+                <button id="team-management-toggle" class="w-full h-8 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-sky-300 flex items-center justify-between px-3 border-b border-slate-600 transition-colors">
+                    <span class="text-sm font-medium">Team Management</span>
+                    <svg id="team-management-arrow" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform duration-300">
+                        <path d="m18 15-6-6-6 6"/>
+                    </svg>
+                </button>
+                
+                <!-- Drawer Content -->
+                <div class="p-4 space-y-4 overflow-y-auto" style="height: calc(100% - 32px);">
+                    ${renderTeamManagementContent(teamData, user)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render team management drawer content
+     * @param {Object} teamData - Current team data
+     * @param {Object} user - Current user data
+     * @returns {string} HTML content for the drawer
+     */
+    function renderTeamManagementContent(teamData, user) {
+        // Debug logging
+        console.log('TeamInfo: renderTeamManagementContent called');
+        console.log('TeamInfo: teamData:', teamData);
+        console.log('TeamInfo: user:', user);
+        
+        if (!teamData || !user) {
+            console.log('TeamInfo: Missing teamData or user');
+            return `
+                <div class="text-center py-8">
+                    <p class="text-sm text-slate-400">No team selected</p>
+                    <p class="text-xs text-slate-500">Debug: teamData=${!!teamData}, user=${!!user}</p>
+                </div>
+            `;
         }
 
-        // Loading state when we have a team ID but no team data yet
-        if (user && currentTeam && !teamData) {
-            renderLoadingState();
-            return;
+        // Try different possible user ID properties
+        const userId = user.id || user.uid || user.profile?.id || user.profile?.uid;
+        const isTeamLeader = teamData.leaderId === userId;
+        
+        console.log('TeamInfo: isTeamLeader check:', {
+            teamLeaderId: teamData.leaderId,
+            'user.id': user.id,
+            'user.uid': user.uid,
+            'user.profile?.id': user.profile?.id,
+            'user.profile?.uid': user.profile?.uid,
+            'resolved userId': userId,
+            isTeamLeader
+        });
+        
+        if (!isTeamLeader) {
+            return `
+                <div class="text-center py-8">
+                    <p class="text-sm text-slate-400">Team member features coming soon...</p>
+                    <p class="text-xs text-slate-500 mt-2">Settings and preferences will be available here.</p>
+                    <p class="text-xs text-slate-600 mt-1">Debug: Leader=${teamData.leaderId}, You=${userId}</p>
+                </div>
+            `;
         }
+
+        // Team leader content
+        return `
+            <!-- Join Code Section -->
+            <div class="space-y-3">
+                <h3 class="text-sm font-medium text-slate-300">Join Code</h3>
+                <div class="flex items-center space-x-2">
+                    <div class="flex-1 bg-slate-700 rounded px-3 py-2 text-sm font-mono text-slate-200 border border-slate-600">
+                        ${teamData.joinCode || 'Loading...'}
+                    </div>
+                    <button class="copy-join-code-btn p-2 bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white rounded transition-colors" 
+                            title="Copy join code">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                            <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                        </svg>
+                    </button>
+                    <button class="regenerate-join-code-btn px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded transition-colors">
+                        Regenerate
+                    </button>
+                </div>
+                <p class="text-xs text-slate-500">Share this code with players to join your team</p>
+            </div>
+
+            <!-- Future sections will go here -->
+            <div class="border-t border-slate-600 pt-4">
+                <div class="text-center py-4">
+                    <p class="text-xs text-slate-500">More team management features coming soon...</p>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render state when user has no teams
+     */
+    function renderNoTeamsState() {
+        panel.innerHTML = `
+            <div class="panel-content">
+                <div class="text-center space-y-4">
+                    <h2 class="text-sm font-medium text-slate-300">Team Management</h2>
+                    <p class="text-xs text-slate-400">You're not part of any teams yet</p>
+                    
+                    <div class="space-y-3">
+                        <button class="create-team-button w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-colors">
+                            Create a Team
+                        </button>
+                        
+                        <button class="join-team-button w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors">
+                            Join a Team
+                        </button>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500">
+                        Teams help organize matches and track availability
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render state when no team is selected (this should rarely be shown now)
+     */
+    function renderNoTeamSelected() {
+        return `
+            <div class="flex-1 flex items-center justify-center">
+                <div class="text-center space-y-3">
+                    <div class="w-16 h-16 mx-auto bg-slate-700 rounded-lg flex items-center justify-center">
+                        <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                    </div>
+                    <p class="text-sm text-slate-400">Select a team to view roster</p>
+                </div>
+            </div>
+        `;
     }
 
     /**
@@ -147,122 +668,8 @@ const TeamInfo = (function() {
         panel.innerHTML = `
             <div class="panel-content">
                 <div class="flex items-center justify-center py-8">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
                     <span class="ml-3 text-sm text-slate-300">Loading team...</span>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Render team display
-     * @param {Object} teamData - Full team data
-     * @param {Object} user - Current user data
-     */
-    function renderTeamDisplay(teamData, user) {
-        const roster = teamData.playerRoster || [];
-        const playerCount = roster.length;
-        const maxPlayers = teamData.maxPlayers || 10;
-        const joinCode = teamData.joinCode || 'N/A';
-        const logoUrl = teamData.teamLogoUrl || '/assets/images/default-team-logo.png';
-        
-        // Find team leader
-        const leader = roster.find(player => player.role === 'leader');
-        
-        panel.innerHTML = `
-            <div class="panel-content space-y-4">
-                <!-- Team Header Button -->
-                <div class="w-full bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg p-3 cursor-pointer">
-                    <h2 class="text-lg font-bold text-white text-center">${teamData.teamName}</h2>
-                </div>
-
-                <!-- Team Logo (Centered) -->
-                <div class="flex justify-center">
-                    <img src="${logoUrl}" alt="${teamData.teamName} logo" 
-                         class="w-24 h-24 rounded-lg object-cover bg-slate-700"
-                         onerror="this.src='/assets/images/default-team-logo.png'">
-                </div>
-
-                <!-- Join Code -->
-                <div class="bg-slate-800 rounded-lg p-3">
-                    <div class="text-xs text-slate-400 mb-1">Team Join Code</div>
-                    <button class="join-code font-mono text-sm text-blue-400 hover:text-blue-300 cursor-pointer transition-colors">
-                        Join Code: ${joinCode}
-                    </button>
-                    <div class="text-xs text-slate-500 mt-1">Click to copy</div>
-                </div>
-
-                <!-- Player Count -->
-                <div class="flex justify-between items-center text-sm">
-                    <span class="text-slate-300">Team Roster</span>
-                    <span class="text-slate-400">${playerCount}/${maxPlayers} players</span>
-                </div>
-
-                <!-- Roster List -->
-                <div class="space-y-2 max-h-40 overflow-y-auto">
-                    ${roster.map(player => `
-                        <div class="flex items-center justify-between py-2 px-3 bg-slate-800 rounded-lg">
-                            <div class="flex items-center space-x-2">
-                                <span class="text-sm text-slate-200">
-                                    ${player.displayName}
-                                    ${player.role === 'leader' ? '★' : ''}
-                                </span>
-                                <span class="text-xs text-slate-400">(${player.initials})</span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                ${player.userId === user.uid ? 
-                                    '<span class="text-xs text-blue-400">You</span>' : 
-                                    ''
-                                }
-                                ${player.role === 'leader' ? 
-                                    '<span class="text-xs text-yellow-400">Leader</span>' : 
-                                    '<span class="text-xs text-slate-500">Member</span>'
-                                }
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-
-                ${roster.length === 0 ? `
-                    <div class="text-center py-4">
-                        <p class="text-sm text-slate-400">No players in roster</p>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    /**
-     * Render team management buttons (for guests or users without teams)
-     * @param {Object|null} user - Current user state
-     */
-    function renderTeamManagementButtons(user) {
-        const isSignedIn = !!user;
-        const headerText = isSignedIn ? "Team Management" : "Team Management";
-        const subText = isSignedIn ? "Create or join a team to get started" : "Sign in to create or join a team";
-        const buttonsDisabled = !isSignedIn;
-
-        panel.innerHTML = `
-            <div class="panel-content space-y-4">
-                <div class="text-center mb-4">
-                    <h2 class="text-sm font-medium text-slate-300 mb-2">${headerText}</h2>
-                    <p class="text-xs text-slate-400">${subText}</p>
-                </div>
-                
-                <div class="space-y-3">
-                    <button class="create-team-button w-full px-4 py-3 ${buttonsDisabled ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-lg transition-colors duration-200 focus:outline-none ${!buttonsDisabled ? 'focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900' : ''}" ${buttonsDisabled ? 'disabled' : ''}>
-                        Create a Team
-                    </button>
-                    
-                    <button class="join-team-button w-full px-4 py-3 ${buttonsDisabled ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white text-sm font-medium rounded-lg transition-colors duration-200 focus:outline-none ${!buttonsDisabled ? 'focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-900' : ''}" ${buttonsDisabled ? 'disabled' : ''}>
-                        Join a Team
-                    </button>
-                </div>
-                
-                <div class="text-center mt-4">
-                    <p class="text-xs text-slate-500">
-                        Teams help organize matches and track availability
-                    </p>
                 </div>
             </div>
         `;

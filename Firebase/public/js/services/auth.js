@@ -357,6 +357,40 @@ const AuthService = (() => {
   };
 
   /**
+   * Refresh current user's profile from database
+   * @returns {Promise<Object|null>} Updated profile or null if not authenticated
+   */
+  const refreshProfile = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (!user) {
+      console.warn('Cannot refresh profile: user not authenticated');
+      return null;
+    }
+
+    try {
+      console.log('AuthService: Refreshing user profile...');
+      const updatedProfile = await fetchUserProfile(user.uid);
+      
+      // Update state with refreshed profile
+      stateService.setState('user', {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        profile: updatedProfile
+      });
+
+      console.log('AuthService: Profile refreshed successfully');
+      return updatedProfile;
+    } catch (error) {
+      console.error('AuthService: Failed to refresh profile:', error);
+      throw new Error('Failed to refresh profile');
+    }
+  };
+
+  /**
    * Check if user is authenticated
    * @returns {boolean} True if user is signed in
    */
@@ -394,7 +428,8 @@ const AuthService = (() => {
     getUserProfile,
     isAuthenticated,
     hasProfile,
-    cleanup
+    cleanup,
+    refreshProfile
   };
 })();
 
@@ -409,5 +444,6 @@ export const {
   getCurrentUser,
   getUserProfile,
   isAuthenticated,
-  hasProfile
+  hasProfile,
+  refreshProfile
 } = AuthService; 

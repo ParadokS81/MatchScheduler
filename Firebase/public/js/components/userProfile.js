@@ -34,46 +34,43 @@ const UserProfile = (function() {
         if (!panel) return;
 
         // Guest State
-        if (!user) {
-            panel.innerHTML = `
-                <div class="panel-content">
-                    <button class="sign-in-button px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm font-medium text-white">
-                        Sign in with Google
-                    </button>
-                </div>
-            `;
-            return;
-        }
+if (!user) {
+    panel.innerHTML = `
+        <div class="panel-content flex items-center justify-center h-full">
+            <button class="sign-in-button px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors">
+                Sign in with Google
+            </button>
+        </div>
+    `;
+    return;
+}
 
-        // Authenticated but no profile/team
-        if (!user.profile) {
-            panel.innerHTML = `
-                <div class="panel-content">
-                    <div class="text-sm text-slate-300">Welcome!</div>
-                </div>
-            `;
-            return;
-        }
+// Authenticated but no profile/team
+if (!user.profile) {
+    panel.innerHTML = `
+        <div class="panel-content flex items-center justify-center h-full">
+            <div class="text-sm text-muted-foreground">Welcome!</div>
+        </div>
+    `;
+    return;
+}
 
-        // User with profile
-        const initials = user.profile.displayName
-            .split(' ')
-            .map(n => n[0])
-            .join('')
-            .toUpperCase();
-
-        panel.innerHTML = `
-            <div class="panel-content">
-                <div class="flex items-center justify-between">
-                    <div class="text-sm text-slate-300">
-                        ${user.profile.displayName} <span class="text-slate-500">(${initials})</span>
-                    </div>
-                    <button class="edit-profile-button text-xs text-blue-400 hover:text-blue-300">
-                        Edit Profile
-                    </button>
-                </div>
+// User with profile
+panel.innerHTML = `
+    <div class="panel-content h-full flex flex-col justify-center">
+        <div class="flex items-center justify-between">
+            <div class="text-sm text-foreground">
+                Welcome ${user.profile.displayName}
             </div>
-        `;
+            <button class="edit-profile-button text-primary hover:text-primary/80 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+`;
     }
 
     function signIn() {

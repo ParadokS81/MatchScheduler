@@ -479,6 +479,25 @@ const DatabaseService = (() => {
   };
 
   /**
+   * Get a single team by ID
+   * @param {string} teamId - Team ID
+   * @returns {Promise<Object|null>} Team document or null if not found
+   */
+  const getTeam = async (teamId) => {
+    ensureInitialized();
+    try {
+      const doc = await db.collection('teams').doc(teamId).get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error('Database Service: getTeam failed:', error);
+      throw new Error('Failed to fetch team');
+    }
+  };
+
+  /**
    * Get user's teams with resilient parallel fetching
    * @param {string} userId - User ID
    * @returns {Promise<Array>} Array of team documents
@@ -564,6 +583,7 @@ const DatabaseService = (() => {
     onConnectionStateChange,
     // Utility Methods
     getAllActiveTeams,
+    getTeam,
     getTeamsByDivision,
     getUserTeams,
     // Cleanup

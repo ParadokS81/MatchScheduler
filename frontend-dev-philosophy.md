@@ -1,313 +1,589 @@
-# Frontend Development Philosophy & Guidelines
+# Frontend Architecture Guide - MatchScheduler
 
-## Project Overview
+## Overview
+This document defines the complete frontend architecture for MatchScheduler, consolidating layout rules, scaling strategies, design system, and implementation patterns into a single source of truth.
 
-This is a Google Apps Script web application for managing sports team availability and scheduling. The frontend uses vanilla JavaScript with a modular architecture, Tailwind CSS for styling, and integrates with Google Sheets as the backend database.
+## Table of Contents
+1. [Core Layout System](#core-layout-system)
+2. [Scaling Strategy](#scaling-strategy)
+3. [Design System](#design-system)
+4. [Component Patterns](#component-patterns)
+5. [Firebase Integration](#firebase-integration)
+6. [Responsive Design](#responsive-design)
+7. [Implementation Workflow](#implementation-workflow)
 
-## Core Architecture Philosophy
+---
 
-### 1. Modular Component System
+## Core Layout System
 
-- **Components** = UI elements that manage specific sections of the interface
-- **Services** = Shared business logic and state management
-- **App Controller** = Central orchestrator for component communication
-- Each module uses the Revealing Module Pattern for clean encapsulation
+### The Sacred 3x3 Grid
 
-### 2. Separation of Concerns
+**This structure is IMMUTABLE - it never changes**
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    App.js       │     │    Services     │     │   Components    │
-│  (Coordinator)  │◄──►│ (Shared Logic)  │◄──►│  (UI Elements)  │
-│                 │     │                 │     │                 │
-│ - Central State │     │ - GridSelection │     │ - UserProfile   │
-│ - Data Flow     │     │ - Templates     │     │ - WeekNav       │
-│ - Initialization│     │ - Backend Calls │     │ - Filters, etc. │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-
-### 3. HTML-First Approach
-
-- Static HTML structure in `02-body-structure.html` provides the foundation
-- JavaScript components enhance existing HTML rather than generate it
-- Every interactive element must have a unique `id` for JavaScript access
-- Styling is done purely with Tailwind CSS utility classes
-
-## Development Guidelines
-
-### File Organization
-
-```
-frontend2/
-│
-├── 01-head-content.html        # Document head, meta tags, CSS links
-├── 02-body-structure.html      # Static HTML structure with IDs
-├── 03-modals.html              # Modal dialog structures
-├── 04-scripts.html             # Script includes and initialization
-│
-├── components/                 # UI component modules
-│   ├── UserProfile.js
-│   ├── WeekNavigation.js
-│   ├── MatchFilters.js
-│   ├── TeamInfo.js
-│   ├── AvailabilityGrid.js
-│   ├── FavoritesList.js
-│   ├── GridTools.js
-│   └── BrowseTeams.js
-│
-├── services/                   # Shared business logic
-│   ├── GridSelectionService.js
-│   └── TemplateService.js
-│
-└── main/
-    └── App.js                  # Central application controller
+```css
+.main-grid {
+  display: grid;
+  
+  /* HYBRID SCALING for sidebars:
+     - 20% of viewport width for proportional scaling
+     - Never smaller than 300px (usable minimum)
+     - Never larger than 400px (prevents excessive width)
+     This ensures perfect layout from 1080p to 4K displays
+  */
+  grid-template-columns: clamp(300px, 20vw, 400px) 1fr clamp(300px, 20vw, 400px);
+  
+  grid-template-rows: 80px 1fr 1fr;        /* Fixed header, equal content rows */
+  gap: 1rem;
+  height: calc(100vh - 60px - 2rem);      /* Full height minus nav and padding */
+}
 ```
 
-### Component Development Pattern
+### Panel Layout
+```
+┌─────────────┬─────────────────┬─────────────┐
+│ TOP-LEFT    │ TOP-CENTER      │ TOP-RIGHT   │
+│ User Profile│ Week Navigation │ Team Filters│
+├─────────────┼─────────────────┼─────────────┤
+│ MIDDLE-LEFT │ MIDDLE-CENTER   │ MIDDLE-RIGHT│
+│ Team Info   │ Grid Week 1     │ Favorites   │
+├─────────────┼─────────────────┼─────────────┤
+│ BOTTOM-LEFT │ BOTTOM-CENTER   │ BOTTOM-RIGHT│
+│ Grid Tools  │ Grid Week 2     │ Browse Teams│
+└─────────────┴─────────────────┴─────────────┘
+```
 
-Every component should follow this structure:
+### Layout Rules
+1. **Components own their panel interior only**
+2. **Never modify panel dimensions or grid position**
+3. **Use flexbox for internal panel layouts**
+4. **Panels have overflow handling (scroll/hidden)**
 
+---
+
+## Scaling Strategy
+
+### Hybrid Scaling Approach
+
+**Base Font Size Scaling**
+```css
+:root {
+  /* Base: 16px at 1920px viewport */
+  font-size: clamp(14px, 0.833vw, 20px);
+}
+```
+
+### Scaling Units Reference
+
+| Unit Type | Use Case | Example |
+|-----------|----------|---------|
+| `rem` | Most sizing (scales with root) | `padding: 1rem` |
+| `em` | Relative to parent font | `margin: 0.5em` |
+| `px` | Borders, minimum sizes | `border: 1px solid` |
+| `%` | Relative widths within panels | `width: 100%` |
+| `vw/vh` | Full viewport references | `height: calc(100vh - 60px)` |
+
+### Component Scaling Rules
+```css
+/* Small elements (buttons, inputs) */
+.btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  min-height: 2.5rem;
+}
+
+/* Medium elements (cards, sections) */
+.card {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+}
+
+/* Large elements (panels, modals) */
+.panel-content {
+  padding: 1.5rem;
+  gap: 1rem;
+}
+```
+
+---
+
+## Design System
+
+### Color Palette
+
+**Modern Approach: Use a Theme Generator**
+
+Instead of manually defining colors, use [TweakCN](https://tweakcn.com/editor/theme) to:
+1. Visually design your color scheme
+2. Get automatic dark mode support
+3. Export theme with proper OKLCH colors
+4. Copy the generated CSS variables
+
+**Example Theme Structure:**
+```css
+:root {
+  /* Generated from TweakCN */
+  --background: oklch(0.2046 0 0);
+  --foreground: oklch(0.9219 0 0);
+  --card: oklch(0.2686 0 0);
+  --card-foreground: oklch(0.9219 0 0);
+  --primary: oklch(0.7686 0.1647 70.0804);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.2686 0 0);
+  --muted: oklch(0.2686 0 0);
+  --muted-foreground: oklch(0.7155 0 0);
+  --accent: oklch(0.4732 0.1247 46.2007);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --border: oklch(0.3715 0 0);
+  /* ... plus shadows, radii, fonts */
+}
+```
+
+**Why OKLCH?**
+- Perceptually uniform color space
+- Consistent lightness across hues
+- Better for creating color scales
+- Modern CSS standard
+
+### Typography Scale
+```css
+/* Using rem for scalability */
+--text-xs: 0.75rem;     /* 12px */
+--text-sm: 0.875rem;    /* 14px */
+--text-base: 1rem;      /* 16px */
+--text-lg: 1.125rem;    /* 18px */
+--text-xl: 1.25rem;     /* 20px */
+--text-2xl: 1.5rem;     /* 24px */
+```
+
+### Spacing System
+Based on 0.25rem increments:
+```css
+/* Consistent spacing scale */
+--space-1: 0.25rem;   /* 4px */
+--space-2: 0.5rem;    /* 8px */
+--space-3: 0.75rem;   /* 12px */
+--space-4: 1rem;      /* 16px */
+--space-5: 1.25rem;   /* 20px */
+--space-6: 1.5rem;    /* 24px */
+--space-8: 2rem;      /* 32px */
+```
+
+### Component Styling Patterns
+
+**Tailwind-First Approach**
+
+Use Tailwind utility classes exclusively - no custom CSS needed:
+
+```html
+<!-- Example: Card Component -->
+<div class="bg-card text-card-foreground border border-border rounded-lg p-4">
+  <h3 class="text-lg font-semibold mb-2">Card Title</h3>
+  <p class="text-muted-foreground">Card content goes here</p>
+</div>
+
+<!-- Example: Button (from Shadcn/UI pattern) -->
+<button class="bg-primary text-primary-foreground hover:bg-primary/90 
+               px-4 py-2 rounded-md font-medium transition-colors">
+  Click Me
+</button>
+```
+
+**Using Shadcn/UI Components**
+
+1. Visit [shadcn/ui](https://ui.shadcn.com/docs/components)
+2. Find the component you need
+3. Copy the HTML structure
+4. The component automatically uses your theme variables
+5. Adapt the React patterns to vanilla JS
+
+**Benefits:**
+- No custom CSS to maintain
+- Consistent with modern web standards
+- AI tools understand these patterns
+- Easy to modify and iterate
+
+---
+
+## Component Patterns
+
+### JavaScript Structure (Revealing Module Pattern)
 ```javascript
 const ComponentName = (function() {
     // Private variables
-    let _panel, _elements;
+    let _panel;
+    let _elements = {};
+    let _state = {};
     
     // Private methods
-    function _handleEvent() {
-        // Event handling logic
+    function _render() {
+        // Update DOM
+    }
+    
+    function _handleEvent(e) {
+        // Handle events
     }
     
     // Public API
     function init(panelId) {
         _panel = document.getElementById(panelId);
-        if (!_panel) return;
+        if (!_panel) {
+            console.error(`Panel ${panelId} not found`);
+            return;
+        }
         
-        // Find sub-elements
-        _elements = _panel.querySelector('#specific-element');
-        
-        // Attach event listeners
-        _elements.addEventListener('click', _handleEvent);
-        
-        console.log("ComponentName Component Initialized.");
+        _setupElements();
+        _attachListeners();
+        console.log(`${ComponentName} initialized`);
     }
     
     function update(data) {
-        // Update UI with new data
+        _state = { ..._state, ...data };
+        _render();
     }
     
     return { init, update };
 })();
 ```
 
-### Service Development Pattern
-
-Services manage shared state and business logic:
-
-```javascript
-const ServiceName = (function() {
-    // Private state
-    let _sharedData = {};
-    
-    function init() {
-        console.log("ServiceName Initialized.");
-    }
-    
-    function performAction(data) {
-        // Business logic here
-        // May interact with google.script.run for backend calls
-    }
-    
-    return { init, performAction };
-})();
-```
-
-## UI Development Standards
-
-### Styling Approach
-
-- **Tailwind CSS Only** - No custom CSS files
-- **Component-Based Styling** - Style elements in the HTML where they're defined
-- **Responsive Design** - Use Tailwind's responsive prefixes (sm:, md:, lg:)
-- **Design System** - Follow Shadcn/UI patterns for professional appearance
-
-### Shadcn/UI Integration
-
-- **Don't** install Shadcn/UI (this isn't a React project)
-- **Do** reference their patterns: Visit [shadcn/ui components](https://ui.shadcn.com/) for inspiration
-- Copy HTML structure and Tailwind classes from their examples
-- Adapt to vanilla JavaScript by implementing the behavior manually
-
-### Icon Usage (Lucide)
-
-1. Go to [Lucide Icons](https://lucide.dev/) website
-2. Find the desired icon
-3. Click "Copy SVG"
-4. Paste directly into HTML
-5. Style with Tailwind: `class="h-5 w-5 text-blue-500"`
-
-### Required Element IDs
-
-Every HTML element that JavaScript needs to interact with must have an ID:
-
+### HTML Structure Pattern
 ```html
-<!-- Grid panels (already defined) -->
-<div id="grid-cell-top-left">
-    <!-- User profile elements -->
-    <span id="user-profile-display-name"></span>
-    <button id="edit-profile-btn"></button>
+<!-- Component root always uses flexbox -->
+<div class="component-root">
+    <!-- Header section (if needed) -->
+    <div class="component-header">
+        <h3 class="text-base font-semibold">Title</h3>
+        <button class="btn btn-sm">Action</button>
+    </div>
+    
+    <!-- Content section -->
+    <div class="component-content">
+        <!-- Component specific content -->
+    </div>
+    
+    <!-- Footer section (if needed) -->
+    <div class="component-footer">
+        <!-- Actions, pagination, etc -->
+    </div>
 </div>
-
-<!-- Interactive elements need IDs -->
-<button id="prev-week-btn">Previous</button>
-<select id="division-filter-select"></select>
-<div id="availability-grid-week1"></div>
 ```
 
-## Data Flow Architecture
+### CSS Pattern for Components
+```css
+.component-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: var(--space-4);
+}
 
-### Initialization Sequence
+.component-header {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+}
 
-1. HTML loads completely
-2. DOMContentLoaded event fires
-3. App.init() runs
-4. Services initialize first (GridSelectionService, TemplateService)
-5. UI Components initialize with their panel IDs
-6. Backend data fetching begins
-7. Components render with initial data
+.component-content {
+    flex: 1;
+    overflow-y: auto;
+}
 
-### Communication Patterns
-
-**Component → App → Component**
-
-```javascript
-// Component requests action
-App.requestWeekChange('next');
-
-// App coordinates the change
-function requestWeekChange(direction) {
-    // Update internal state
-    // Get new data
-    // Tell components to update
-    WeekNavigation.updateDisplay(newWeekInfo);
-    AvailabilityGrid.render('grid-week1', newHTML);
+.component-footer {
+    flex-shrink: 0;
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
 }
 ```
 
-**Component → Service → Component**
+---
 
+## Firebase Integration
+
+### Pattern Conversions
+
+**Old (Google Apps Script)**
 ```javascript
-// Component uses service
-GridSelectionService.add('cell-mon-9am');
-
-// Other components can read service state
-const selection = GridSelectionService.getSelection();
-```
-
-## Backend Integration
-
-### Google Apps Script Patterns
-
-```javascript
-// Calling backend functions
 google.script.run
     .withSuccessHandler(handleSuccess)
     .withFailureHandler(handleError)
-    .backendFunctionName(parameters);
-
-// Handle responses
-function handleSuccess(data) {
-    // Update UI with server response
-}
+    .functionName(params);
 ```
 
-### Data Caching Strategy
-
-- Cache frequently accessed data in App.js private variables
-- Minimize server calls by intelligent caching
-- Refresh cache when data changes (user actions, week navigation)
-
-## Error Handling & Debugging
-
-### Console Logging Standards
-
-- Every component logs initialization: `console.log("ComponentName Component Initialized.")`
-- Log important state changes and user actions
-- Use descriptive log messages for debugging
-
-### Error Prevention
-
-Always check if elements exist before using them:
-
+**New (Firebase)**
 ```javascript
-const element = document.getElementById('some-id');
-if (!element) {
-    console.error('Element #some-id not found!');
-    return;
+// Using async/await pattern
+async function callFirebaseFunction(functionName, params) {
+    try {
+        const result = await getFunctions()
+            .httpsCallable(functionName)(params);
+            
+        if (result.data.success) {
+            return result.data;
+        } else {
+            throw new Error(result.data.message);
+        }
+    } catch (error) {
+        console.error(`${functionName} error:`, error);
+        throw error;
+    }
 }
 ```
 
-### Development Workflow
+### Real-time Listeners
+```javascript
+// Subscribe to data changes
+function subscribeToTeam(teamId, callback) {
+    const unsubscribe = getDb()
+        .collection('teams')
+        .doc(teamId)
+        .onSnapshot((doc) => {
+            if (doc.exists) {
+                callback({ id: doc.id, ...doc.data() });
+            }
+        });
+    
+    // Return unsubscribe function for cleanup
+    return unsubscribe;
+}
+```
 
-1. Open browser developer tools
-2. Check console for initialization messages
-3. Verify all components load without errors
-4. Test component interactions step by step
-5. Use console.log strategically to track data flow
+### State Management Pattern
+```javascript
+// In StateService
+const StateService = (function() {
+    let _state = {
+        user: null,
+        currentTeam: null,
+        weekOffset: 0
+    };
+    
+    let _listeners = new Map();
+    
+    function setState(key, value) {
+        _state[key] = value;
+        _notifyListeners(key, value);
+    }
+    
+    function getState(key) {
+        return _state[key];
+    }
+    
+    function subscribe(key, callback) {
+        if (!_listeners.has(key)) {
+            _listeners.set(key, []);
+        }
+        _listeners.get(key).push(callback);
+    }
+    
+    return { setState, getState, subscribe };
+})();
+```
 
-## Performance Considerations
+---
 
-### Efficient DOM Manipulation
+## Responsive Design
 
-- Cache element references in component init
-- Minimize DOM queries during runtime
-- Batch DOM updates when possible
+### Breakpoint Strategy
+```css
+/* Mobile First Approach */
+/* Base styles for mobile < 640px */
 
-### Event Handling
+/* Tablet */
+@media (min-width: 640px) {
+    /* sm: styles */
+}
 
-- Use event delegation for dynamic content
-- Remove event listeners when components are destroyed
-- Avoid memory leaks with proper cleanup
+/* Desktop */
+@media (min-width: 1024px) {
+    /* lg: styles */
+    /* This is where 3x3 grid applies */
+}
 
-## Future Development Guidelines
+/* Large Desktop */
+@media (min-width: 1536px) {
+    /* 2xl: styles */
+}
+```
 
-### Adding New Components
+### Mobile Layout
+Below 1024px, panels stack vertically:
+```css
+@media (max-width: 1023px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        gap: var(--space-4);
+    }
+    
+    /* Adjust panel heights for mobile */
+    .panel {
+        min-height: auto;
+        max-height: 80vh;
+    }
+}
+```
 
-1. Create new file in `components/` directory
-2. Follow the component pattern template
-3. Add script include to `04-scripts.html`
-4. Initialize in App.js with appropriate panel ID
-5. Add required HTML structure and IDs to `02-body-structure.html`
+---
 
-### Extending Services
+## Implementation Workflow
 
-- Keep services focused on single responsibilities
-- Maintain clean public APIs
-- Handle all error cases internally
-- Document any Google Apps Script dependencies
+### Theme Setup (Do This First!)
 
-### UI Enhancements
+1. **Generate Your Theme**
+   - Go to [TweakCN](https://tweakcn.com/editor/theme)
+   - Customize colors, typography, shadows
+   - Test light/dark modes
+   - Copy the generated CSS
 
-- Always start with Tailwind utility classes
-- Reference Shadcn/UI for complex component patterns
-- Ensure accessibility with proper ARIA labels
-- Test on mobile devices using responsive design
+2. **Install Theme**
+   ```html
+   <!-- In your index.html or main CSS file -->
+   <style>
+     /* Paste your TweakCN theme here */
+     :root { ... }
+     .dark { ... }
+   </style>
+   ```
 
-## Testing Strategy
+3. **Configure Tailwind**
+   ```javascript
+   // tailwind.config.js
+   module.exports = {
+     theme: {
+       extend: {
+         colors: {
+           // Map CSS variables to Tailwind
+           background: 'var(--background)',
+           foreground: 'var(--foreground)',
+           primary: {
+             DEFAULT: 'var(--primary)',
+             foreground: 'var(--primary-foreground)',
+           },
+           // ... etc
+         }
+       }
+     }
+   }
+   ```
 
-### Manual Testing Checklist
+### For Each Component
 
-- [ ] All console initialization messages appear
-- [ ] No JavaScript errors in console
-- [ ] All buttons and interactions work
-- [ ] Data loads and displays correctly
-- [ ] Week navigation functions properly
-- [ ] Grid selection state management works
-- [ ] Backend integration functions (when implemented)
+1. **Structure HTML**
+   ```html
+   <!-- Follow component HTML pattern -->
+   <div class="component-root">
+       <!-- Use semantic HTML -->
+       <!-- Apply utility classes -->
+   </div>
+   ```
 
-### Browser Compatibility
+2. **Apply Styling**
+   - Use CSS variables for colors
+   - Use rem units for sizing
+   - Follow spacing scale
+   - Ensure responsive behavior
 
-- **Primary target**: Modern Chrome (Google Workspace environment)
-- **Secondary**: Firefox, Safari, Edge
-- Mobile responsive design for tablet/phone access
+3. **Implement JavaScript**
+   - Follow revealing module pattern
+   - Connect to Firebase services
+   - Handle loading/error states
+   - Clean up listeners
 
-This philosophy ensures maintainable, scalable code that integrates well with Google Apps Script while providing a professional user experience.
+4. **Test Scaling**
+   - Check at 1366px (laptop)
+   - Check at 1920px (desktop)
+   - Check at 2560px (large monitor)
+   - Verify mobile stack
+
+### Iteration Checklist
+- [ ] Component fits within panel boundaries
+- [ ] Scaling works across viewports
+- [ ] Colors match design system
+- [ ] Spacing follows scale
+- [ ] Interactive states work
+- [ ] Firebase integration complete
+- [ ] Error states handled
+- [ ] Loading states shown
+
+---
+
+## Quick Reference
+
+### CSS Class Naming
+```css
+/* Component roots */
+.user-profile-root
+.week-nav-root
+.team-info-root
+
+/* Sub-sections */
+.component-header
+.component-content
+.component-footer
+
+/* States */
+.is-loading
+.is-active
+.has-error
+```
+
+### Common Tailwind Utilities
+
+**With Theme Variables:**
+```css
+/* Colors - automatically use your theme */
+bg-background, bg-card, bg-primary
+text-foreground, text-muted-foreground
+border-border, border-input
+
+/* Spacing - use Tailwind's scale */
+p-4 (1rem), m-2 (0.5rem), gap-4, space-y-2
+
+/* Typography */
+text-sm, text-base, font-semibold, font-mono
+
+/* Layout */
+flex, flex-col, grid, items-center, justify-between
+
+/* Sizing */
+w-full, h-full, min-h-screen, max-w-md
+
+/* Borders & Radius */
+border, rounded-md, rounded-lg
+
+/* Shadows (from theme) */
+shadow-sm, shadow-md, shadow-lg
+
+/* States */
+hover:bg-primary/90, focus:ring-2, disabled:opacity-50
+```
+
+**Example Component with Full Tailwind:**
+```html
+<div class="bg-card text-card-foreground rounded-lg border border-border p-6 shadow-sm">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-semibold">Team Info</h2>
+    <button class="text-muted-foreground hover:text-foreground transition-colors">
+      <svg class="w-5 h-5">...</svg>
+    </button>
+  </div>
+  <div class="space-y-2">
+    <p class="text-sm text-muted-foreground">Manage your team settings</p>
+  </div>
+</div>
+```
+
+### Debug Helpers
+```javascript
+// Check if panel fits content
+console.log('Panel height:', _panel.offsetHeight);
+console.log('Content height:', _panel.scrollHeight);
+
+// Check computed styles
+const styles = window.getComputedStyle(_panel);
+console.log('Font size:', styles.fontSize);
+console.log('Padding:', styles.padding);
+```

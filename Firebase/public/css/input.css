@@ -1,142 +1,204 @@
+/* Clean Slate Theme Variables - Must come FIRST */
+:root {
+  --background: oklch(0.9842 0.0034 247.8575);
+  --foreground: oklch(0.2795 0.0368 260.0310);
+  --card: oklch(1.0000 0 0);
+  --card-foreground: oklch(0.2795 0.0368 260.0310);
+  --popover: oklch(1.0000 0 0);
+  --popover-foreground: oklch(0.2795 0.0368 260.0310);
+  --primary: oklch(0.5854 0.2041 277.1173);
+  --primary-foreground: oklch(1.0000 0 0);
+  --secondary: oklch(0.9276 0.0058 264.5313);
+  --secondary-foreground: oklch(0.3729 0.0306 259.7328);
+  --muted: oklch(0.9670 0.0029 264.5419);
+  --muted-foreground: oklch(0.5510 0.0234 264.3637);
+  --accent: oklch(0.9299 0.0334 272.7879);
+  --accent-foreground: oklch(0.3729 0.0306 259.7328);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(1.0000 0 0);
+  --border: oklch(0.8717 0.0093 258.3382);
+  --input: oklch(0.8717 0.0093 258.3382);
+  --ring: oklch(0.5854 0.2041 277.1173);
+  --chart-1: oklch(0.5854 0.2041 277.1173);
+  --chart-2: oklch(0.5106 0.2301 276.9656);
+  --chart-3: oklch(0.4568 0.2146 277.0229);
+  --chart-4: oklch(0.3984 0.1773 277.3662);
+  --chart-5: oklch(0.3588 0.1354 278.6973);
+  --sidebar: oklch(0.9670 0.0029 264.5419);
+  --sidebar-foreground: oklch(0.2795 0.0368 260.0310);
+  --sidebar-primary: oklch(0.5854 0.2041 277.1173);
+  --sidebar-primary-foreground: oklch(1.0000 0 0);
+  --sidebar-accent: oklch(0.9299 0.0334 272.7879);
+  --sidebar-accent-foreground: oklch(0.3729 0.0306 259.7328);
+  --sidebar-border: oklch(0.8717 0.0093 258.3382);
+  --sidebar-ring: oklch(0.5854 0.2041 277.1173);
+  --font-sans: Inter, sans-serif;
+  --font-serif: Merriweather, serif;
+  --font-mono: JetBrains Mono, monospace;
+  --radius: 0.5rem;
+  --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+  --shadow: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+  --shadow-md: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 2px 4px -2px hsl(0 0% 0% / 0.10);
+  --shadow-lg: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 4px 6px -2px hsl(0 0% 0% / 0.10);
+  --shadow-xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 8px 10px -2px hsl(0 0% 0% / 0.10);
+  --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+}
+
+.dark {
+  --background: oklch(0.2077 0.0398 265.7549);
+  --foreground: oklch(0.9288 0.0126 255.5078);
+  --card: oklch(0.2527 0.0346 274.0597);
+  --card-foreground: oklch(0.9288 0.0126 255.5078);
+  --popover: oklch(0.2683 0.0345 271.9773);
+  --popover-foreground: oklch(0.9288 0.0126 255.5078);
+  --primary: oklch(0.6801 0.1583 276.9349);
+  --primary-foreground: oklch(0.2077 0.0398 265.7549);
+  --secondary: oklch(0.3351 0.0331 260.9120);
+  --secondary-foreground: oklch(0.8717 0.0093 258.3382);
+  --muted: oklch(0.2795 0.0368 260.0310);
+  --muted-foreground: oklch(0.7137 0.0192 261.3246);
+  --accent: oklch(0.3729 0.0306 259.7328);
+  --accent-foreground: oklch(0.8717 0.0093 258.3382);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(0.2077 0.0398 265.7549);
+  --border: oklch(0.4461 0.0263 256.8018);
+  --input: oklch(0.4461 0.0263 256.8018);
+  --ring: oklch(0.6801 0.1583 276.9349);
+  --chart-1: oklch(0.6801 0.1583 276.9349);
+  --chart-2: oklch(0.5854 0.2041 277.1173);
+  --chart-3: oklch(0.5106 0.2301 276.9656);
+  --chart-4: oklch(0.4568 0.2146 277.0229);
+  --chart-5: oklch(0.3984 0.1773 277.3662);
+  --sidebar: oklch(0.2527 0.0346 274.0597);
+  --sidebar-foreground: oklch(0.9288 0.0126 255.5078);
+  --sidebar-primary: oklch(0.6801 0.1583 276.9349);
+  --sidebar-primary-foreground: oklch(0.2077 0.0398 265.7549);
+  --sidebar-accent: oklch(0.3729 0.0306 259.7328);
+  --sidebar-accent-foreground: oklch(0.8717 0.0093 258.3382);
+  --sidebar-border: oklch(0.4461 0.0263 256.8018);
+  --sidebar-ring: oklch(0.6801 0.1583 276.9349);
+  --font-sans: Inter, sans-serif;
+  --font-serif: Merriweather, serif;
+  --font-mono: JetBrains Mono, monospace;
+  --radius: 0.5rem;
+  --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+  --shadow: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+  --shadow-md: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 2px 4px -2px hsl(0 0% 0% / 0.10);
+  --shadow-lg: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 4px 6px -2px hsl(0 0% 0% / 0.10);
+  --shadow-xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 8px 10px -2px hsl(0 0% 0% / 0.10);
+  --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+}
+
+
 /* Fluid Typography Foundation */
 :root {
   /* Base font size that scales with viewport */
-  font-size: clamp(14px, 0.9vw, 19px);
-  
-  /* Layout scale variables for easy adjustments */
-  --scale-factor: 1;
-  --panel-side-width: 16.25rem;  /* 260px at base */
-  --panel-gap: 1rem;
-  --header-height: 5rem;  /* 80px at base */
-  --grid-cell-height: 2.5rem;  /* 40px at base */
-  --grid-cell-min-width: 5.625rem;  /* 90px at base */
+  font-size: clamp(14px, 0.833vw, 20px);
 }
 
-/* Fine-tune scaling for specific breakpoints */
-@media (min-width: 1920px) {
-  :root {
-    font-size: 16px;  /* 1080p baseline */
-  }
+/* Force dark mode as default */
+:root {
+  color-scheme: dark;
 }
 
-@media (min-width: 2560px) {
-  :root {
-    font-size: 19px;  /* 1440p optimal */
-  }
+/* Apply theme background and text color to body */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
-@media (min-width: 3840px) {
-  :root {
-    font-size: 24px;  /* 4K scaling */
-  }
-}
-
-/* Header adjustments */
-.app-header {
-  @apply w-full flex-shrink-0;
-  height: 3rem;  /* 48px */
-}
-
-/* Panel padding adjustments */
-.panel-content {
-  @apply flex flex-col h-full;
-  padding: 1rem;
-}
-
-/* Button and form element sizes */
-.btn-sm {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-}
-
-.btn-md {
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-}
-
-/* Grid-specific overrides if needed */
-.availability-cell {
-  min-height: 2.2rem;
-}
-
+/* Tailwind Directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Core Layout Structure - NEVER MODIFY */
+/* Core Layout Structure - The Sacred 3x3 Grid */
 .app-container {
-  @apply h-screen flex flex-col items-center bg-slate-900;
+  @apply h-screen flex flex-col pb-4; /* Only padding-bottom */
 }
 
 .main-grid {
-  @apply grid w-full;
-  gap: var(--panel-gap);
-  padding: var(--panel-gap);
-  max-width: 87.5rem;  /* 1400px at 16px base */
-  grid-template-columns: var(--panel-side-width) minmax(52.5rem, 1fr) var(--panel-side-width);
-  grid-template-rows: var(--header-height) auto auto;
-  height: auto;
+  @apply flex-grow grid w-full mx-auto gap-3;
+  max-width: 85rem;
+  grid-template-columns: clamp(200px, 15vw, 300px) 1fr clamp(200px, 15vw, 300px);
+  grid-template-rows: 5rem auto auto; /* Let content determine height */
+  height: calc(100% - 4rem); /* Keep the bottom padding space */
 }
 
 /* Panel Base Styles */
 .panel {
-  @apply bg-slate-800/60 rounded-lg overflow-hidden;
+  @apply bg-card rounded-lg border border-border overflow-hidden;
 }
 
-/* Common Panel Patterns */
-.panel-with-scroll {
-  @apply flex flex-col h-full;
-}
-
-.panel-header {
-  @apply flex-shrink-0;
-  padding: var(--panel-gap);
-}
-
-.panel-body {
-  @apply flex-1 overflow-y-auto;
-  padding: var(--panel-gap);
-}
-
-.centered-panel {
-  @apply flex items-center justify-center h-full;
-}
-
-.panel-with-toolbar {
-  @apply flex flex-col h-full;
-}
-
-.toolbar {
-  @apply flex-shrink-0 flex border-b border-slate-700;
-  gap: calc(var(--panel-gap) * 0.5);
-  padding: calc(var(--panel-gap) * 0.5);
+.panel-content {
+  @apply flex flex-col h-full overflow-hidden;
+  padding: 0.75rem; /* Reduced from 1rem (25% reduction) */
 }
 
 /* Responsive Layout */
-@media (max-width: 87.5rem) {  /* 1400px */
+@media (max-width: 1024px) {
   .main-grid {
-    grid-template-columns: 13.75rem minmax(43.75rem, 1fr) 13.75rem;  /* 220px, 700px, 220px */
-  }
-}
-
-@media (max-width: 64rem) {  /* 1024px */
-  .main-grid {
-    grid-template-columns: 1fr;
+    @apply grid-cols-1;
     grid-template-rows: auto;
   }
 }
 
-/* Custom styles for grid selection */
+/* Component Layer - Common patterns */
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors;
+  }
+  
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+  }
+  
+  .btn-destructive {
+    @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
+  }
+  
+  /* Inputs */
+  .input {
+    @apply w-full px-3 py-2 bg-background border border-input rounded-md 
+           text-foreground placeholder-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-ring;
+  }
+  
+  /* Cards */
+  .card {
+    @apply bg-card text-card-foreground rounded-lg border border-border p-6;
+  }
+}
+
+/* Grid Selection Styles */
 .cell-selected {
-  background-color: rgba(56, 189, 248, 0.3) !important;
-  border-color: rgb(56, 189, 248) !important;
-  box-shadow: inset 0 0 0 0.0625rem rgb(56, 189, 248);  /* Changed from 1px */
+  background-color: oklch(var(--primary) / 0.2);
+  border-color: oklch(var(--primary));
+  box-shadow: inset 0 0 0 1px oklch(var(--primary));
+}
+
+/* Team Management Drawer Animation */
+.drawer-closed {
+  transform: translateY(calc(100% - 40px));
+}
+
+.drawer-open {
+  transform: translateY(0);
 }
 
 /* Prevent text selection during drag */
-.availability-cell, .time-label, .day-header-full {
+.no-select {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
-} 
+}

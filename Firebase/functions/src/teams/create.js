@@ -1,9 +1,24 @@
 // create.js - Team creation functionality
 // TODO: Implement according to Technical PRD Section 4.1
 
+console.log('=== CREATE.JS LOADING ===');
+console.log('admin exists?', typeof require('firebase-admin') !== 'undefined');
+
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+
+console.log('admin loaded, apps length:', admin.apps?.length);
+console.log('admin.firestore exists?', typeof admin.firestore === 'function');
+console.log('admin.firestore.FieldValue exists immediately?', !!admin.firestore.FieldValue);
+
+console.log('1. About to destructure FieldValue');
+console.log('2. admin.firestore type:', typeof admin.firestore);
+console.log('3. admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);
+
 const { FieldValue } = admin.firestore;
+
+console.log('4. FieldValue destructured successfully:', typeof FieldValue);
+console.log('5. FieldValue.serverTimestamp exists?', !!FieldValue.serverTimestamp);
 
 exports.createTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
@@ -82,7 +97,14 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       const joinCode = generateJoinCode();
 
       const teamRef = db.collection('teams').doc();
+      
+      console.log('6. About to call FieldValue.serverTimestamp()');
+      console.log('7. FieldValue at runtime:', typeof FieldValue);
+      console.log('8. FieldValue.serverTimestamp at runtime:', typeof FieldValue.serverTimestamp);
+      
       const now = FieldValue.serverTimestamp();
+      
+      console.log('9. serverTimestamp() called successfully, result:', typeof now);
 
       // 9. Create team document with all required fields
       const teamData = {

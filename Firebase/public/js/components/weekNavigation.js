@@ -70,28 +70,28 @@ const WeekNavigation = (() => {
     const weekInfo = calculateWeeksInfo(offset);
     
     panel.innerHTML = `
-      <div class="flex items-center justify-between">
-        <button id="prev-week-btn" 
-                class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 text-sm"
-                ${offset === 0 ? 'disabled' : ''}>
-          ← Prev
-        </button>
-        <div class="text-center flex-1 mx-4">
-          <div class="text-sm font-medium text-slate-200">
-            <span class="text-slate-300">Week ${weekInfo[0].weekNumber}:</span> 
-            <span class="text-white">${weekInfo[0].dateRange}</span>
-            <span class="mx-4 text-slate-600">|</span>
-            <span class="text-slate-300">Week ${weekInfo[1].weekNumber}:</span> 
-            <span class="text-white">${weekInfo[1].dateRange}</span>
-          </div>
+    <div class="flex items-center justify-between px-4 h-full">
+      <button id="prev-week-btn" 
+              class="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              ${offset === 0 ? 'disabled' : ''}>
+        ← Prev
+      </button>
+      <div class="text-center flex-1 mx-4">
+        <div class="text-sm font-medium">
+          <span class="text-muted-foreground">Week ${weekInfo[0].weekNumber}:</span> 
+          <span class="text-foreground">${weekInfo[0].dateRange}</span>
+          <span class="mx-4 text-border">|</span>
+          <span class="text-muted-foreground">Week ${weekInfo[1].weekNumber}:</span> 
+          <span class="text-foreground">${weekInfo[1].dateRange}</span>
         </div>
-        <button id="next-week-btn" 
-                class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 text-sm"
-                ${offset === 1 ? 'disabled' : ''}>
-          Next →
-        </button>
       </div>
-    `;
+      <button id="next-week-btn" 
+              class="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              ${offset === 1 ? 'disabled' : ''}>
+        Next →
+      </button>
+    </div>
+  `;
     
     attachEventListeners();
   };
