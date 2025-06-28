@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 
 /**
  * Removes a player from a team. Only the team leader can remove players.
@@ -91,7 +92,7 @@ async function removePlayer(data, context) {
         throw new functions.https.HttpsError('not-found', `User is not a member of team "${teamName}".`);
       }
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
 
       // Update team document
       transaction.update(teamRef, {
@@ -101,7 +102,7 @@ async function removePlayer(data, context) {
 
       // Update target user's teams array
       transaction.update(targetUserRef, {
-        teams: admin.firestore.FieldValue.arrayRemove(teamId),
+        teams: FieldValue.arrayRemove(teamId),
         updatedAt: now
       });
 
@@ -240,7 +241,7 @@ async function transferLeadership(data, context) {
         throw new functions.https.HttpsError('failed-precondition', `New leader is no longer a member of team "${teamName}".`);
       }
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
 
       // Update team document
       transaction.update(teamRef, {
@@ -446,7 +447,7 @@ async function updateTeamSettings(data, context) {
       }
 
       // Add timestamp to updates
-      updates.lastActivityAt = admin.firestore.FieldValue.serverTimestamp();
+      updates.lastActivityAt = FieldValue.serverTimestamp();
 
       // Update team document
       transaction.update(teamRef, updates);
@@ -568,7 +569,7 @@ async function regenerateJoinCode(data, context) {
         throw new functions.https.HttpsError('permission-denied', 'Only the team leader can regenerate the join code.');
       }
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
       const newCode = generateJoinCode();
 
       // Update team document

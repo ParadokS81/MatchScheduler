@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 const db = admin.firestore();
 
 // Constants for business rules
@@ -169,14 +170,14 @@ exports.checkTeamActivity = functions.pubsub
         // Check for inactivity
         if (team.lastActivityAt && team.lastActivityAt < fourteenDaysAgo) {
           updates.status = 'inactive';
-          updates.statusChangedAt = admin.firestore.FieldValue.serverTimestamp();
+          updates.statusChangedAt = FieldValue.serverTimestamp();
           inactiveCount++;
         }
         
         // Check for old join code
         if (team.joinCodeCreatedAt && team.joinCodeCreatedAt < thirtyDaysAgo) {
           updates.joinCode = generateJoinCode();
-          updates.joinCodeCreatedAt = admin.firestore.FieldValue.serverTimestamp();
+          updates.joinCodeCreatedAt = FieldValue.serverTimestamp();
           regeneratedCount++;
         }
         

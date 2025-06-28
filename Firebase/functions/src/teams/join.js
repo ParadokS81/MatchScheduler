@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 
 exports.joinTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
@@ -94,7 +95,7 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
         );
       }
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
 
       // Create new player object with fresh user data
       const newPlayer = {
@@ -105,13 +106,13 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
 
       // Update team document
       transaction.update(teamDoc.ref, {
-        playerRoster: admin.firestore.FieldValue.arrayUnion(newPlayer),
+        playerRoster: FieldValue.arrayUnion(newPlayer),
         lastActivityAt: now
       });
 
       // Update user's teams array - arrayUnion prevents duplicates
       transaction.update(userRef, {
-        teams: admin.firestore.FieldValue.arrayUnion(teamDoc.id),
+        teams: FieldValue.arrayUnion(teamDoc.id),
         updatedAt: now
       });
 

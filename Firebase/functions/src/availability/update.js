@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 
 // Constants
 const MAX_SLOTS_PER_REQUEST = 154;  // Exactly 2 weeks (7 days × 11 slots × 2)
@@ -154,7 +155,7 @@ exports.updateAvailability = functions.https.onCall(async (data, context) => {
         year: parseInt(weekId.split('-W')[0]),
         weekNumber: parseInt(weekId.split('-W')[1]),
         availabilityGrid: {},
-        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastUpdatedAt: FieldValue.serverTimestamp(),
         lastUpdatedBy: userId
       };
 
@@ -183,7 +184,7 @@ exports.updateAvailability = functions.https.onCall(async (data, context) => {
       });
 
       // Update timestamps
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
       availabilityData.lastUpdatedAt = now;
       availabilityData.lastUpdatedBy = userId;
 

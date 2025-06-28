@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 
 exports.leaveTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
@@ -71,7 +72,7 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
         player => player.userId !== userId
       );
 
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = FieldValue.serverTimestamp();
 
       // Prepare team update
       const teamUpdate = {
@@ -87,7 +88,7 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
       // Perform atomic updates
       transaction.update(teamRef, teamUpdate);
       transaction.update(userRef, {
-        teams: admin.firestore.FieldValue.arrayRemove(teamId),
+        teams: FieldValue.arrayRemove(teamId),
         updatedAt: now
       });
     });

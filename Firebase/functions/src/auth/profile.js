@@ -3,6 +3,7 @@
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require("firebase-admin/firestore");
 
 /**
  * Creates a new user profile after authentication
@@ -63,7 +64,7 @@ exports.createProfile = functions.https.onCall(async (data, context) => {
       userId: userId,
       displayName: trimmedDisplayName,
       initials: initials.toUpperCase(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       teams: [],
       savedTemplates: {}
     };
@@ -203,7 +204,7 @@ exports.updateProfile = functions.https.onCall(async (data, context) => {
     }
     
     // Add update timestamp
-    updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    updates.updatedAt = FieldValue.serverTimestamp();
     
     // Update profile and all team rosters in transaction
     await db.runTransaction(async (transaction) => {
@@ -231,7 +232,7 @@ exports.updateProfile = functions.https.onCall(async (data, context) => {
             
             transaction.update(teamRef, { 
               playerRoster: updatedRoster,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: FieldValue.serverTimestamp()
             });
           }
         });

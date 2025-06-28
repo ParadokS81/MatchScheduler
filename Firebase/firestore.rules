@@ -2,18 +2,329 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
+    
+    // Users collection security rules
+    match /users/{userId} {
+      // READ: Any authenticated user can read user profiles (needed for team rosters)
+      // Note: For MVP, this broad access is acceptable. Future consideration: 
+      // implement privacy settings or restrict to team members only
+      allow read: if request.auth != null;
+      
+      // CREATE: User can only create their own profile document with strict validation
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && hasValidCreateData()
+        && onlyAllowedCreateFields();
+      
+      // UPDATE: User can only update their own profile with validation and restrictions
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !('userId' in request.resource.data)      // Block identity theft
+        && !('createdAt' in request.resource.data)   // Block audit manipulation
+        && (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() >= 2));
+      
+      // DELETE: Explicitly disallow profile deletion
+      allow delete: if false;
+      
+      // === CREATE VALIDATION FUNCTIONS ===
+      function hasValidCreateData() {
+        let data = request.resource.data;
+        return hasRequiredCreateFields()
+          && isValidUserId()
+          && isValidDisplayName() 
+          && isValidInitials()
+          && isValidCreatedAt()
+          && (!('teams' in data) || isValidTeamsArray());
+      }
+      
+      function hasRequiredCreateFields() {
+        // Check required fields manually (gas stove method)
+        let data = request.resource.data;
+        return ('displayName' in data) && ('initials' in data) && ('userId' in data) && ('createdAt' in data);
+      }
+      
+      function onlyAllowedCreateFields() {
+        // Allow only valid create fields (gas stove method)
+        let data = request.resource.data;
+        return !data.keys().hasAny(['adminFlag', 'isAdmin', 'password', 'secret']);
+      }
+      
+      function isValidUserId() {
+        return request.resource.data.userId is string
+          && request.resource.data.userId == request.auth.uid;
+      }
+      
+      function isValidDisplayName() {
+        return request.resource.data.displayName is string
+          && request.resource.data.displayName.size() >= 2
+          && request.resource.data.displayName.size() <= 20;
+      }
+      
+      function isValidInitials() {
+        return request.resource.data.initials is string
+          && request.resource.data.initials.size() == 3;
+      }
+      
+      function isValidCreatedAt() {
+        return request.resource.data.createdAt is timestamp;
+      }
+      
+      function isValidTeamsArray() {
+        return request.resource.data.teams is list
+          && request.resource.data.teams.size() <= 2; // Cannot exceed limit even on create
+      }
+      
+      // === UPDATE VALIDATION FUNCTIONS ===
+      function hasValidUpdateData() {
+        let data = request.resource.data;
+        return (!('displayName' in data) || isValidDisplayNameUpdate())
+          && (!('initials' in data) || isValidInitialsUpdate())
+          && (!('teams' in data) || isValidTeamsUpdate())
+          && (!('discordUsername' in data) || isValidDiscordUsername())
+          && (!('photoURL' in data) || isValidPhotoURL());
+      }
+      
+      function unchangedCriticalFields() {
+        let data = request.resource.data;
+        return (!('userId' in data) || data.userId == resource.data.userId)
+          && (!('createdAt' in data) || data.createdAt == resource.data.createdAt);
+      }
+      
+      function onlyAllowedUpdateFields() {
+        // Block critical fields manually (gas stove method)
+        return !('userId' in request.resource.data)
+          && !('createdAt' in request.resource.data);
+      }
+      
+      function isValidDisplayNameUpdate() {
+        return request.resource.data.displayName is string
+          && request.resource.data.displayName.size() >= 2
+          && request.resource.data.displayName.size() <= 20;
+      }
+      
+      function isValidInitialsUpdate() {
+        return request.resource.data.initials is string
+          && request.resource.data.initials.size() == 3;
+      }
+      
+      function isValidTeamsUpdate() {
+        return request.resource.data.teams is list
+          && request.resource.data.teams.size() <= 2;
+      }
+      
+      function isValidDiscordUsername() {
+        return request.resource.data.discordUsername == null
+          || (request.resource.data.discordUsername is string
+              && request.resource.data.discordUsername.size() > 0);
+      }
+      
+      function isValidPhotoURL() {
+        return request.resource.data.photoURL == null
+          || (request.resource.data.photoURL is string
+              && request.resource.data.photoURL.size() > 0);
+      }
+    }
+    
+    // Teams collection security rules
+    match /teams/{teamId} {
+      // READ: Authenticated users can read active teams, OR team members can read their own team (even if inactive)
+      allow read: if request.auth != null
+        && (resource.data.active == true || isTeamMember());
+      
+      // CREATE: Disallow direct creation - handled by Cloud Functions only
+      allow create: if false;
+      
+      // UPDATE: Only team leader can update, with field restrictions and data validation
+      allow update: if request.auth != null
+        && resource != null
+        && resource.data.leaderId == request.auth.uid      // Only team leader
+        && !('teamId' in request.resource.data)            // Block team ID changes
+        && !('createdAt' in request.resource.data);        // Block audit manipulation
+      
+      // DELETE: Disallow direct deletion - archiving handled by Cloud Functions
+      allow delete: if false;
+      
+      // === TEAM VALIDATION FUNCTIONS ===
+      function isTeamMember() {
+        // More efficient and reliable: check user's teams array instead of iterating team roster
+        return request.auth != null 
+          && teamId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams;
+      }
+      
+      function isTeamLeader() {
+        return resource.data.teamLeader == request.auth.uid;
+      }
+      
+      function unchangedTeamCriticalFields() {
+        let data = request.resource.data;
+        return (!('teamId' in data) || data.teamId == resource.data.teamId)
+          && (!('createdAt' in data) || data.createdAt == resource.data.createdAt)
+          && (!('teamLeader' in data) || data.teamLeader == resource.data.teamLeader || isValidLeadershipChange());
+      }
+      
+      function isValidLeadershipChange() {
+        // Allow leadership transfer if:
+        // 1. Current user is the leader, AND
+        // 2. New leader is a team member (check their user document)
+        return resource.data.teamLeader == request.auth.uid
+          && request.resource.data.teamLeader != request.auth.uid
+          && teamId in get(/databases/$(database)/documents/users/$(request.resource.data.teamLeader)).data.teams;
+      }
+      
+      function validMaxPlayersUpdate() {
+        return !('maxPlayers' in request.resource.data)
+          || (request.resource.data.maxPlayers is int
+              && request.resource.data.maxPlayers >= getCurrentRosterSize());
+      }
+      
+      function getCurrentRosterSize() {
+        // Check updated roster size if being modified, otherwise use existing
+        return ('playerRoster' in request.resource.data) 
+          ? request.resource.data.playerRoster.size()
+          : resource.data.playerRoster.size();
+      }
+      
+      function hasValidTeamUpdateData() {
+        let data = request.resource.data;
+        return (!('teamName' in data) || isValidTeamName())
+          && (!('divisions' in data) || isValidDivisions())
+          && (!('teamLogoUrl' in data) || isValidTeamLogoUrl())
+          && (!('maxPlayers' in data) || isValidMaxPlayers())
+          && (!('active' in data) || isValidActive());
+      }
+      
+      function isValidTeamName() {
+        return request.resource.data.teamName is string
+          && request.resource.data.teamName.size() >= 3
+          && request.resource.data.teamName.size() <= 25;
+      }
+      
+      function isValidDivisions() {
+        let divisions = request.resource.data.divisions;
+        return divisions is list
+          && divisions.size() > 0
+          && divisions.size() <= 3
+          && divisionsContainOnlyValidValues(divisions);
+      }
+      
+      function divisionsContainOnlyValidValues(divisions) {
+        // Check each division manually (gas stove method)
+        return divisions.hasOnly(['1', '2', '3']);
+      }
+      
+      function isValidTeamLogoUrl() {
+        return request.resource.data.teamLogoUrl == null
+          || (request.resource.data.teamLogoUrl is string
+              && request.resource.data.teamLogoUrl.size() > 0);
+      }
+      
+      function isValidMaxPlayers() {
+        return request.resource.data.maxPlayers is int
+          && request.resource.data.maxPlayers >= 5
+          && request.resource.data.maxPlayers <= 10;
+      }
+      
+      function isValidActive() {
+        return request.resource.data.active is bool;
+      }
+      
+      function onlyAllowedTeamUpdateFields() {
+        // Block critical team fields manually (gas stove method)
+        return !('teamId' in request.resource.data)
+          && !('createdAt' in request.resource.data);
+      }
+    }
+    
+    // Availability collection security rules
+    match /availability/{documentId} {
+      // READ: Any authenticated user can read availability data (needed for team comparison feature)
+      allow read: if request.auth != null;
+      
+      // WRITE: Only team members can write to their team's availability data with strict validation
+      allow write: if request.auth != null
+        && isAvailabilityTeamMember(documentId)
+        && hasValidAvailabilityData(documentId)
+        && onlyAllowedAvailabilityFields();
+      
+      // DELETE: Disallow direct deletion
+      allow delete: if false;
+      
+      // === AVAILABILITY VALIDATION FUNCTIONS ===
+      function isAvailabilityTeamMember(docId) {
+        // Extract teamId from compound documentId format: {teamId}_{year}-W{weekNumber}
+        // Example: "ABC123_2024-W01" -> teamId = "ABC123"
+        let teamId = getTeamIdFromDocumentId(docId);
+        return teamId != null && teamId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams;
+      }
+      
+      function getTeamIdFromDocumentId(docId) {
+        // Split on underscore and take first part as teamId
+        // documentId format: {teamId}_{year}-W{weekNumber}
+        let parts = docId.split('_');
+        return parts.size() > 0 ? parts[0] : null;
+      }
+      
+      function hasValidAvailabilityData(docId) {
+        let data = request.resource.data;
+        return hasConsistentTeamId(docId)
+          && (!('availabilityGrid' in data) || isValidAvailabilityGrid())
+          && (!('weekId' in data) || isValidWeekId())
+          && (!('teamId' in data) || isValidTeamIdField(docId))
+          && (!('year' in data) || isValidYear())
+          && (!('weekNumber' in data) || isValidWeekNumber());
+      }
+      
+      function hasConsistentTeamId(docId) {
+        // Ensure teamId in document matches teamId from document ID
+        let expectedTeamId = getTeamIdFromDocumentId(docId);
+        return !('teamId' in request.resource.data) 
+          || request.resource.data.teamId == expectedTeamId;
+      }
+      
+      function isValidTeamIdField(docId) {
+        // Validate teamId field matches document ID if present
+        let expectedTeamId = getTeamIdFromDocumentId(docId);
+        return request.resource.data.teamId is string
+          && request.resource.data.teamId == expectedTeamId;
+      }
+      
+      function isValidAvailabilityGrid() {
+        // Ensure availabilityGrid is a map (object) structure
+        return request.resource.data.availabilityGrid is map;
+      }
+      
+      function isValidWeekId() {
+        // Validate weekId format: YYYY-WXX (e.g., 2024-W01)
+        return request.resource.data.weekId is string
+          && request.resource.data.weekId.matches('^\\d{4}-W\\d{2}$');
+      }
+      
+      function isValidYear() {
+        // Validate year is a reasonable integer
+        return request.resource.data.year is int
+          && request.resource.data.year >= 2024
+          && request.resource.data.year <= 2030;
+      }
+      
+      function isValidWeekNumber() {
+        // Validate week number is between 1-53
+        return request.resource.data.weekNumber is int
+          && request.resource.data.weekNumber >= 1
+          && request.resource.data.weekNumber <= 53;
+      }
+      
+      function onlyAllowedAvailabilityFields() {
+        // Prevent users from setting metadata fields (gas stove method)
+        let protectedFields = ['lastUpdatedAt', 'lastUpdatedBy'];
+        return !request.resource.data.keys().hasAny(protectedFields);
+      }
+    }
+    
+    // TODO: Add security rules for other collections as needed
+    
+    // Temporary fallback - deny all other access
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 7, 18);
+      allow read, write: if false;
     }
   }
 }

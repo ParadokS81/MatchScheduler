@@ -36,7 +36,8 @@ const testFiles = [
   'auth.integration.test.js',
   'teams-clean.integration.test.js',
   'availability.integration.test.js',
-  'scheduled.integration.test.js'
+  'scheduled.integration.test.js',
+  'rules.integration.test.js'
 ];
 
 // Run tests sequentially

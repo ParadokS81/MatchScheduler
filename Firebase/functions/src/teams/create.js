@@ -11,13 +11,14 @@ console.log('admin loaded, apps length:', admin.apps?.length);
 console.log('admin.firestore exists?', typeof admin.firestore === 'function');
 console.log('admin.firestore.FieldValue exists immediately?', !!admin.firestore.FieldValue);
 
-console.log('1. About to destructure FieldValue');
+console.log('1. About to import FieldValue directly');
 console.log('2. admin.firestore type:', typeof admin.firestore);
 console.log('3. admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);
 
-const { FieldValue } = admin.firestore;
+// Test Gemini's solution: Direct import instead of destructuring
+const { FieldValue } = require("firebase-admin/firestore");
 
-console.log('4. FieldValue destructured successfully:', typeof FieldValue);
+console.log('4. FieldValue imported successfully:', typeof FieldValue);
 console.log('5. FieldValue.serverTimestamp exists?', !!FieldValue.serverTimestamp);
 
 exports.createTeam = functions.https.onCall(async (data, context) => {

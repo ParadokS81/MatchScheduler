@@ -23,6 +23,7 @@
     "firebase-functions": "^5.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.0",
     "firebase-functions-test": "^3.1.0",
     "jest": "^29.0.0",
     "node-fetch": "^2.7.0"
