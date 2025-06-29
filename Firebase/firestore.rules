@@ -13,87 +13,73 @@ service cloud.firestore {
       // CREATE: User can only create their own profile document with strict validation
       allow create: if request.auth != null
         && request.auth.uid == userId
-        && hasValidCreateData()
-        && onlyAllowedCreateFields();
+        && isDataValidForCreate(); // Single function to force sequential evaluation
       
       // UPDATE: User can only update their own profile with validation and restrictions
       allow update: if request.auth != null
         && request.auth.uid == userId
-        && !('userId' in request.resource.data)      // Block identity theft
-        && !('createdAt' in request.resource.data)   // Block audit manipulation
-        && (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() >= 2));
+        && onlyAllowedUpdateFields()  // Block critical fields like userId, createdAt, admin flags
+        && hasValidUpdateData();      // Validate all updateable fields (displayName, initials, etc.)
       
       // DELETE: Explicitly disallow profile deletion
       allow delete: if false;
       
-      // === CREATE VALIDATION FUNCTIONS ===
-      function hasValidCreateData() {
-        let data = request.resource.data;
-        return hasRequiredCreateFields()
-          && isValidUserId()
-          && isValidDisplayName() 
-          && isValidInitials()
-          && isValidCreatedAt()
-          && (!('teams' in data) || isValidTeamsArray());
-      }
-      
-      function hasRequiredCreateFields() {
-        // Check required fields manually (gas stove method)
-        let data = request.resource.data;
-        return ('displayName' in data) && ('initials' in data) && ('userId' in data) && ('createdAt' in data);
-      }
-      
-      function onlyAllowedCreateFields() {
-        // Allow only valid create fields (gas stove method)
-        let data = request.resource.data;
-        return !data.keys().hasAny(['adminFlag', 'isAdmin', 'password', 'secret']);
-      }
-      
-      function isValidUserId() {
-        return request.resource.data.userId is string
-          && request.resource.data.userId == request.auth.uid;
-      }
-      
-      function isValidDisplayName() {
-        return request.resource.data.displayName is string
-          && request.resource.data.displayName.size() >= 2
-          && request.resource.data.displayName.size() <= 20;
-      }
-      
-      function isValidInitials() {
-        return request.resource.data.initials is string
-          && request.resource.data.initials.size() == 3;
-      }
-      
-      function isValidCreatedAt() {
-        return request.resource.data.createdAt is timestamp;
-      }
-      
-      function isValidTeamsArray() {
-        return request.resource.data.teams is list
-          && request.resource.data.teams.size() <= 2; // Cannot exceed limit even on create
+      // === COMBINED CREATE VALIDATION FUNCTION ===
+      function isDataValidForCreate() {
+        // Use conditional expression to ensure keys exist before accessing properties
+        return request.resource.data.keys().hasAll(['displayName', 'initials', 'userId', 'createdAt'])
+          ? (
+            // All required keys exist, safe to validate values
+            request.resource.data.userId == request.auth.uid &&
+            request.resource.data.displayName is string &&
+            request.resource.data.displayName.size() >= 2 &&
+            request.resource.data.displayName.size() <= 20 &&
+            request.resource.data.initials is string &&
+            request.resource.data.initials.size() == 3 &&
+            request.resource.data.createdAt is timestamp &&
+            !('adminFlag' in request.resource.data) &&
+            !('isAdmin' in request.resource.data) &&
+            !('password' in request.resource.data) &&
+            !('secret' in request.resource.data) &&
+            (!('teams' in request.resource.data) || (request.resource.data.teams is map && request.resource.data.teams.size() <= 2))
+          )
+          : false; // Required keys missing, fail immediately
       }
       
       // === UPDATE VALIDATION FUNCTIONS ===
       function hasValidUpdateData() {
+        // Validate fields that are being updated using 'in' operator (production compatible)
         let data = request.resource.data;
-        return (!('displayName' in data) || isValidDisplayNameUpdate())
-          && (!('initials' in data) || isValidInitialsUpdate())
-          && (!('teams' in data) || isValidTeamsUpdate())
-          && (!('discordUsername' in data) || isValidDiscordUsername())
-          && (!('photoURL' in data) || isValidPhotoURL());
+        return (
+          !('displayName' in data) || isValidDisplayNameUpdate()
+        ) && (
+          !('initials' in data) || isValidInitialsUpdate()
+        ) && (
+          !('teams' in data) || isValidTeamsUpdate()
+        ) && (
+          !('discordUsername' in data) || isValidDiscordUsername()
+        ) && (
+          !('photoURL' in data) || isValidPhotoURL()
+        );
       }
       
       function unchangedCriticalFields() {
-        let data = request.resource.data;
-        return (!('userId' in data) || data.userId == resource.data.userId)
-          && (!('createdAt' in data) || data.createdAt == resource.data.createdAt);
+        // Ensure critical fields match existing values if they're being updated
+        return (
+          !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId
+        ) && (
+          !('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt
+        );
       }
       
       function onlyAllowedUpdateFields() {
-        // Block critical fields manually (gas stove method)
+        // Blacklist immutable fields - safe and works everywhere
         return !('userId' in request.resource.data)
-          && !('createdAt' in request.resource.data);
+          && !('createdAt' in request.resource.data)
+          && !('adminFlag' in request.resource.data)
+          && !('isAdmin' in request.resource.data)
+          && !('password' in request.resource.data)
+          && !('secret' in request.resource.data);
       }
       
       function isValidDisplayNameUpdate() {
@@ -108,7 +94,7 @@ service cloud.firestore {
       }
       
       function isValidTeamsUpdate() {
-        return request.resource.data.teams is list
+        return request.resource.data.teams is map
           && request.resource.data.teams.size() <= 2;
       }
       
@@ -138,17 +124,17 @@ service cloud.firestore {
       allow update: if request.auth != null
         && resource != null
         && resource.data.leaderId == request.auth.uid      // Only team leader
-        && !('teamId' in request.resource.data)            // Block team ID changes
-        && !('createdAt' in request.resource.data);        // Block audit manipulation
+        && unchangedTeamCriticalFields()                   // Block critical field changes (teamId, createdAt, etc.)
+        && hasValidTeamUpdateData();                       // Validate all updateable fields (teamName, divisions, etc.)
       
       // DELETE: Disallow direct deletion - archiving handled by Cloud Functions
       allow delete: if false;
       
       // === TEAM VALIDATION FUNCTIONS ===
       function isTeamMember() {
-        // More efficient and reliable: check user's teams array instead of iterating team roster
-        return request.auth != null 
-          && teamId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams;
+        // More efficient and reliable: check user's teams map for direct key lookup
+        return request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams[teamId] == true;
       }
       
       function isTeamLeader() {
@@ -156,10 +142,12 @@ service cloud.firestore {
       }
       
       function unchangedTeamCriticalFields() {
-        let data = request.resource.data;
-        return (!('teamId' in data) || data.teamId == resource.data.teamId)
-          && (!('createdAt' in data) || data.createdAt == resource.data.createdAt)
-          && (!('teamLeader' in data) || data.teamLeader == resource.data.teamLeader || isValidLeadershipChange());
+        // Ensure critical fields match existing values if they're being updated
+        return (
+          !('teamId' in request.resource.data) || request.resource.data.teamId == resource.data.teamId
+        ) && (
+          !('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt
+        );
       }
       
       function isValidLeadershipChange() {
@@ -168,7 +156,7 @@ service cloud.firestore {
         // 2. New leader is a team member (check their user document)
         return resource.data.teamLeader == request.auth.uid
           && request.resource.data.teamLeader != request.auth.uid
-          && teamId in get(/databases/$(database)/documents/users/$(request.resource.data.teamLeader)).data.teams;
+          && get(/databases/$(database)/documents/users/$(request.resource.data.teamLeader)).data.teams[teamId] == true;
       }
       
       function validMaxPlayersUpdate() {
@@ -179,18 +167,25 @@ service cloud.firestore {
       
       function getCurrentRosterSize() {
         // Check updated roster size if being modified, otherwise use existing
-        return ('playerRoster' in request.resource.data) 
+        return ('playerRoster' in request.resource.data)
           ? request.resource.data.playerRoster.size()
           : resource.data.playerRoster.size();
       }
       
       function hasValidTeamUpdateData() {
+        // Validate fields that are being updated using 'in' operator (production compatible)
         let data = request.resource.data;
-        return (!('teamName' in data) || isValidTeamName())
-          && (!('divisions' in data) || isValidDivisions())
-          && (!('teamLogoUrl' in data) || isValidTeamLogoUrl())
-          && (!('maxPlayers' in data) || isValidMaxPlayers())
-          && (!('active' in data) || isValidActive());
+        return (
+          !('teamName' in data) || isValidTeamName()
+        ) && (
+          !('divisions' in data) || isValidDivisions()
+        ) && (
+          !('teamLogoUrl' in data) || isValidTeamLogoUrl()
+        ) && (
+          !('maxPlayers' in data) || isValidMaxPlayers()
+        ) && (
+          !('active' in data) || isValidActive()
+        );
       }
       
       function isValidTeamName() {
@@ -229,7 +224,7 @@ service cloud.firestore {
       }
       
       function onlyAllowedTeamUpdateFields() {
-        // Block critical team fields manually (gas stove method)
+        // Blacklist immutable fields - this is the production-safe pattern.
         return !('teamId' in request.resource.data)
           && !('createdAt' in request.resource.data);
       }
@@ -254,7 +249,7 @@ service cloud.firestore {
         // Extract teamId from compound documentId format: {teamId}_{year}-W{weekNumber}
         // Example: "ABC123_2024-W01" -> teamId = "ABC123"
         let teamId = getTeamIdFromDocumentId(docId);
-        return teamId != null && teamId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams;
+        return teamId != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teams[teamId] == true;
       }
       
       function getTeamIdFromDocumentId(docId) {
@@ -265,6 +260,7 @@ service cloud.firestore {
       }
       
       function hasValidAvailabilityData(docId) {
+        // Validate fields that are being updated using 'in' operator (production compatible)
         let data = request.resource.data;
         return hasConsistentTeamId(docId)
           && (!('availabilityGrid' in data) || isValidAvailabilityGrid())
@@ -277,7 +273,7 @@ service cloud.firestore {
       function hasConsistentTeamId(docId) {
         // Ensure teamId in document matches teamId from document ID
         let expectedTeamId = getTeamIdFromDocumentId(docId);
-        return !('teamId' in request.resource.data) 
+        return !('teamId' in request.resource.data)
           || request.resource.data.teamId == expectedTeamId;
       }
       
@@ -314,9 +310,9 @@ service cloud.firestore {
       }
       
       function onlyAllowedAvailabilityFields() {
-        // Prevent users from setting metadata fields (gas stove method)
-        let protectedFields = ['lastUpdatedAt', 'lastUpdatedBy'];
-        return !request.resource.data.keys().hasAny(protectedFields);
+        // Prevent users from setting metadata fields using 'in' operator (production compatible)
+        return !('lastUpdatedAt' in request.resource.data)
+          && !('lastUpdatedBy' in request.resource.data);
       }
     }
     
