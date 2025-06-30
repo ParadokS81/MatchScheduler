@@ -14,6 +14,7 @@ matchscheduler-dev-502c71ae2a80.json
 .firebase
 firebase-debug.log*
 firebase-debug.*.log*
+project_stack.md
 
 # Firebase config - It's good practice to share .firebaserc in a team
 # so everyone deploys to the same project. Uncomment if you want each
