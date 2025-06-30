@@ -77,7 +77,7 @@ async function removePlayer(data, context) {
       const team = freshTeamDoc.data();
 
       // Verify team is active
-      if (team.status !== 'active') {
+      if (!team.active) {
         throw new functions.https.HttpsError('failed-precondition', 'Cannot modify an inactive team.');
       }
 
@@ -94,15 +94,22 @@ async function removePlayer(data, context) {
 
       const now = FieldValue.serverTimestamp();
 
+      // Get target user's current teams and remove this team
+      const targetUserDoc = await transaction.get(targetUserRef);
+      const targetUserData = targetUserDoc.data();
+      const currentTeams = targetUserData.teams || {};
+      const updatedUserTeams = { ...currentTeams };
+      delete updatedUserTeams[teamId];
+
       // Update team document
       transaction.update(teamRef, {
         playerRoster: team.playerRoster.filter(player => player.userId !== targetUserId),
         lastActivityAt: now
       });
 
-      // Update target user's teams array
+      // Update target user's teams map
       transaction.update(targetUserRef, {
-        teams: FieldValue.arrayRemove(teamId),
+        teams: updatedUserTeams,
         updatedAt: now
       });
 
@@ -183,7 +190,7 @@ async function transferLeadership(data, context) {
     const teamName = teamData.teamName;
 
     // Verify team is active outside transaction (for better error message)
-    if (teamData.status !== 'active') {
+    if (!teamData.active) {
       throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
     }
 
@@ -199,8 +206,8 @@ async function transferLeadership(data, context) {
 
     const newLeaderData = newLeaderDoc.data();
 
-    // Verify new leader has this team in their teams array
-    if (!newLeaderData.teams || !newLeaderData.teams.includes(teamId)) {
+    // Verify new leader has this team in their teams map
+    if (!newLeaderData.teams || !newLeaderData.teams[teamId]) {
       throw new functions.https.HttpsError('failed-precondition', `New leader is not a member of team "${teamName}".`);
     }
 
@@ -216,7 +223,7 @@ async function transferLeadership(data, context) {
       const freshNewLeaderData = freshNewLeaderDoc.data();
 
       // Verify team is still active using fresh data
-      if (team.status !== 'active') {
+      if (!team.active) {
         throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
       }
 
@@ -236,8 +243,8 @@ async function transferLeadership(data, context) {
         throw new functions.https.HttpsError('failed-precondition', `New leader must be a member of team "${teamName}".`);
       }
 
-      // Verify new leader still has team in their array using fresh data
-      if (!freshNewLeaderData.teams || !freshNewLeaderData.teams.includes(teamId)) {
+      // Verify new leader still has team in their map using fresh data
+      if (!freshNewLeaderData.teams || !freshNewLeaderData.teams[teamId]) {
         throw new functions.https.HttpsError('failed-precondition', `New leader is no longer a member of team "${teamName}".`);
       }
 
@@ -405,7 +412,7 @@ async function updateTeamSettings(data, context) {
     const teamName = teamData.teamName;
 
     // Verify team is active
-    if (teamData.status !== 'active') {
+    if (!teamData.active) {
       throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
     }
 
@@ -429,7 +436,7 @@ async function updateTeamSettings(data, context) {
       const team = freshTeamDoc.data();
 
       // Verify team is still active
-      if (team.status !== 'active') {
+      if (!team.active) {
         throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
       }
 
@@ -544,7 +551,7 @@ async function regenerateJoinCode(data, context) {
     const teamName = teamData.teamName;
 
     // Verify team is active
-    if (teamData.status !== 'active') {
+    if (!teamData.active) {
       throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
     }
 
@@ -560,7 +567,7 @@ async function regenerateJoinCode(data, context) {
       const team = freshTeamDoc.data();
 
       // Verify team is still active
-      if (team.status !== 'active') {
+      if (!team.active) {
         throw new functions.https.HttpsError('failed-precondition', `Cannot modify team "${teamName}" - it is not active.`);
       }
 

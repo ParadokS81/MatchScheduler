@@ -193,9 +193,9 @@ exports.updateAvailability = functions.https.onCall(async (data, context) => {
         lastActivityAt: now
       };
 
-      // If team was archived, reactivate it
-      if (teamData.status === 'archived') {
-        teamUpdate.status = 'active';
+      // Reactivate team if it's inactive (but not if permanently archived)
+      if (!teamData.active && !teamData.archived) {
+        teamUpdate.active = true;  // Silent reactivation from inactive state
       }
 
       // Perform atomic updates

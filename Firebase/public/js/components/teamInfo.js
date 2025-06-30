@@ -8,10 +8,36 @@ import StateService, { subscribe } from '../services/state.js';
 import Modals from './modals.js';
 
 const TeamInfo = (function() {
-    let panel;
-    
-    // Cache for team names to avoid showing "Team 1", "Team 2"
+    let panel = null;
+    let initialized = false;
+
+    // State subscriptions
+    const stateSubscriptions = new Set();
+
+    // Team name cache to avoid repeated fetches
     const teamNameCache = new Map();
+
+    // Helper functions for safe team operations
+    const getTeamCount = (teams) => {
+        if (!teams || typeof teams !== 'object' || Array.isArray(teams)) {
+            return 0;
+        }
+        return Object.keys(teams).length;
+    };
+
+    const getTeamIds = (teams) => {
+        if (!teams || typeof teams !== 'object' || Array.isArray(teams)) {
+            return [];
+        }
+        return Object.keys(teams);
+    };
+
+    const isUserInTeam = (teams, teamId) => {
+        if (!teams || typeof teams !== 'object' || Array.isArray(teams) || !teamId) {
+            return false;
+        }
+        return teams[teamId] === true;
+    };
 
     /**
      * Initialize the component
@@ -72,7 +98,8 @@ const TeamInfo = (function() {
         
         // Preload team names when user signs in
         if (user && user.profile && user.profile.teams) {
-            preloadTeamNames(user.profile.teams);
+            const teamIds = getTeamIds(user.profile.teams);
+            preloadTeamNames(teamIds);
         }
         
         render();
@@ -385,7 +412,8 @@ const TeamInfo = (function() {
      * @param {Object|null} teamData - Current team data
      */
     function renderTeamSwitcherLayout(user, currentTeam, teamData) {
-        const userTeams = user.profile?.teams || [];
+        // DEFENSIVE: Safe team ID extraction using helper function
+        const userTeams = getTeamIds(user.profile?.teams);
         const team1 = userTeams[0] || null;
         const team2 = userTeams[1] || null;
         

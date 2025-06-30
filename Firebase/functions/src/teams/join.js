@@ -40,7 +40,20 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
     // Check user's team count outside transaction (optimization)
     // Even if this becomes stale, the transaction will still enforce atomicity
     const userData = userDoc.data();
-    if (userData.teams && userData.teams.length >= 2) {
+    
+    // DEFENSIVE: Ensure user data exists
+    if (!userData) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'User profile data is invalid'
+      );
+    }
+    
+    // DEFENSIVE: Handle undefined or malformed teams data
+    const teamCount = userData.teams && typeof userData.teams === 'object' && !Array.isArray(userData.teams)
+      ? Object.keys(userData.teams).length 
+      : 0;
+    if (teamCount >= 2) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Maximum 2 teams per user'
@@ -51,10 +64,30 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
     const result = await db.runTransaction(async (transaction) => {
       // Get fresh user data inside transaction
       const freshUserDoc = await transaction.get(userRef);
+      
+      // DEFENSIVE: Check if user document still exists
+      if (!freshUserDoc.exists) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'User profile not found'
+        );
+      }
+      
       const freshUserData = freshUserDoc.data();
+      
+      // DEFENSIVE: Ensure user data is valid
+      if (!freshUserData) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'User profile data is invalid'
+        );
+      }
 
-      // Double-check team count with fresh data
-      if (freshUserData.teams && freshUserData.teams.length >= 2) {
+      // Double-check team count with fresh data - DEFENSIVE: Handle undefined teams
+      const freshTeamCount = freshUserData.teams && typeof freshUserData.teams === 'object' && !Array.isArray(freshUserData.teams) 
+        ? Object.keys(freshUserData.teams).length 
+        : 0;
+      if (freshTeamCount >= 2) {
         throw new functions.https.HttpsError(
           'failed-precondition',
           'Maximum 2 teams per user'
@@ -65,7 +98,8 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       const teamsQuery = await transaction.get(
         db.collection('teams')
           .where('joinCode', '==', joinCode.toUpperCase())
-          .where('status', '==', 'active')
+          .where('active', '==', true)
+          .where('archived', '==', false)
       );
 
       // Check if team exists with valid join code
@@ -110,9 +144,28 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
         lastActivityAt: now
       });
 
-      // Update user's teams array - arrayUnion prevents duplicates
+      // Update user's teams map - DEFENSIVE: Ensure teams is a map, not array
+      let currentTeams = freshUserData.teams || {};
+      
+      // MIGRATION: Handle legacy array format
+      if (Array.isArray(currentTeams)) {
+        console.log('Converting legacy teams array to map format for user:', userId);
+        const teamsMap = {};
+        currentTeams.forEach(teamId => {
+          if (teamId && typeof teamId === 'string') {
+            teamsMap[teamId] = true;
+          }
+        });
+        currentTeams = teamsMap;
+      } else if (typeof currentTeams !== 'object') {
+        // Handle malformed data
+        console.warn('Invalid teams data format, resetting to empty map for user:', userId);
+        currentTeams = {};
+      }
+      
+      const updatedTeams = { ...currentTeams, [teamDoc.id]: true };
       transaction.update(userRef, {
-        teams: FieldValue.arrayUnion(teamDoc.id),
+        teams: updatedTeams,
         updatedAt: now
       });
 

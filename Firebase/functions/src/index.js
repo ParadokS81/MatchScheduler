@@ -5,7 +5,7 @@ console.log('INDEX.JS: Before initializeApp, admin.firestore.FieldValue exists?'
 
 // Initialize Firebase Admin
 admin.initializeApp({
-  projectId: 'quakeworld-match-scheduler'
+  projectId: 'matchscheduler-dev'
 });
 
 console.log('INDEX.JS: After initializeApp, admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);

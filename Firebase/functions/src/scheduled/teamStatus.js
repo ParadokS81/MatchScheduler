@@ -126,8 +126,7 @@ async function generateUniqueJoinCode(retries = 0) {
   const code = generateJoinCode();
   const existingCode = await db.collection('teams')
     .where('joinCode', '==', code)
-    .where('status', 'in', ['active', 'inactive']) // Check both active and inactive teams
-    .get();
+    .get(); // Check all teams regardless of active status
 
   if (existingCode.empty) {
     return code;
@@ -154,9 +153,10 @@ exports.checkTeamActivity = functions.pubsub
         now.nanoseconds
       );
 
-      // Get all active teams
+      // Get all active, non-archived teams
       const teams = await db.collection('teams')
-        .where('status', '==', 'active')
+        .where('active', '==', true)
+        .where('archived', '==', false)
         .get();
 
       let inactiveCount = 0;
@@ -167,9 +167,9 @@ exports.checkTeamActivity = functions.pubsub
         const team = doc.data();
         let updates = {};
         
-        // Check for inactivity
-        if (team.lastActivityAt && team.lastActivityAt < fourteenDaysAgo) {
-          updates.status = 'inactive';
+        // Check for inactivity (only for non-archived teams)
+        if (!team.archived && team.lastActivityAt && team.lastActivityAt < fourteenDaysAgo) {
+          updates.active = false;  // Mark as inactive (but still recoverable)
           updates.statusChangedAt = FieldValue.serverTimestamp();
           inactiveCount++;
         }

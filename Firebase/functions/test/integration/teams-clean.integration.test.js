@@ -57,7 +57,7 @@ describe('Team Management - Clean Integration Tests', () => {
       expect(teamDoc.exists).toBe(true);
       expect(teamDoc.data().teamName).toBe('Alpha Team');
       expect(teamDoc.data().leaderId).toBe(leader.uid);
-      expect(teamDoc.data().status).toBe('active'); // Teams start active by default
+      expect(teamDoc.data().active).toBe(true); // Teams start active by default
     });
     
     it('should prevent duplicate team names', async () => {
@@ -158,7 +158,8 @@ describe('Team Management - Clean Integration Tests', () => {
       
       // Verify team is archived
       const teamDoc = await db.collection('teams').doc(teamId).get();
-      expect(teamDoc.data().status).toBe('archived');
+      expect(teamDoc.data().active).toBe(false);
+      expect(teamDoc.data().archived).toBe(true);
       expect(teamDoc.data().playerRoster).toHaveLength(0);
     });
     

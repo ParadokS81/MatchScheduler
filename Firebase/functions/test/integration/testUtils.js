@@ -3,13 +3,11 @@ const functions = require('firebase-functions-test')();
 const fetch = require('node-fetch');
 const { createProfile: createProfileFn } = require('../../src/auth/profile');
 
-// Initialize admin with emulator settings
-process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
-
+// Initialize admin with live Firebase settings
 if (!admin.apps.length) {
   admin.initializeApp({
-    projectId: 'quakeworld-match-scheduler'
+    credential: admin.credential.applicationDefault(),
+    projectId: process.env.FIREBASE_PROJECT_ID
   });
 }
 
@@ -86,23 +84,32 @@ async function cleanupTestData() {
       console.warn('   Could not list auth users:', error.message);
     }
 
-    // Clear all Firestore data using the emulator REST API
+    // Clear all Firestore collections (live Firebase)
     console.log('\n3. FIRESTORE CLEANUP...');
-    const projectId = 'quakeworld-match-scheduler';
-    const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
-    const url = `http://${firestoreHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`;
-
-    console.log(`   Clearing Firestore at: ${url}`);
-    const response = await fetch(url, { method: 'DELETE' });
     
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`   ✗ Firestore clear failed: ${response.status} ${response.statusText}`);
-      console.error(`   Error body: ${errorBody}`);
-      throw new Error('Failed to clear Firestore emulator data');
+    // Delete all documents in main collections
+    const collections = ['users', 'teams', 'availability'];
+    let totalDeleted = 0;
+    
+    for (const collectionName of collections) {
+      console.log(`   Cleaning collection: ${collectionName}`);
+      const snapshot = await db.collection(collectionName).get();
+      
+      if (!snapshot.empty) {
+        const batch = db.batch();
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+        console.log(`   ✓ Deleted ${snapshot.docs.length} documents from ${collectionName}`);
+        totalDeleted += snapshot.docs.length;
+      } else {
+        console.log(`   ✓ Collection ${collectionName} already empty`);
+      }
     }
     
-    console.log('   ✓ Firestore cleared successfully');
+    console.log(`   ✓ Firestore cleanup complete - ${totalDeleted} documents deleted`);
     console.log('\n=== CLEANUP COMPLETE ===\n');
     
   } catch (error) {

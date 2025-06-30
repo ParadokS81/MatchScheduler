@@ -4,7 +4,7 @@
 
 # Ignore Google Apps Script credentials from the old project
 Sheets/MatchScheduler/.clasp.json
-
+matchscheduler-dev-502c71ae2a80.json
 
 # ===================================================================
 # Firebase Specific Rules

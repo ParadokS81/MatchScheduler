@@ -65,7 +65,7 @@ exports.createProfile = functions.https.onCall(async (data, context) => {
       displayName: trimmedDisplayName,
       initials: initials.toUpperCase(),
       createdAt: FieldValue.serverTimestamp(),
-      teams: [],
+      teams: {},
       savedTemplates: {}
     };
     
@@ -74,8 +74,17 @@ exports.createProfile = functions.https.onCall(async (data, context) => {
       profileData.discordUsername = discordUsername.trim();
     }
     
-    // Get photo URL from auth provider
+    // Get email and photo URL from auth provider
+    const email = context.auth?.token?.email;
     const picture = context.auth?.token?.picture;
+    
+    // Email is required by security rules
+    if (!email) {
+      throw new functions.https.HttpsError('invalid-argument', 'Email is required but not available from auth token');
+    }
+    
+    profileData.email = email;
+    
     if (picture) {
       profileData.photoURL = picture;
     }
@@ -171,8 +180,9 @@ exports.updateProfile = functions.https.onCall(async (data, context) => {
       const newInitials = initials.toUpperCase();
       
       // Check for conflicts within user's teams
-      if (userData.teams && userData.teams.length > 0) {
-        const teamChecks = userData.teams.map(async teamId => {
+      const teamIds = userData.teams ? Object.keys(userData.teams) : [];
+      if (teamIds.length > 0) {
+        const teamChecks = teamIds.map(async teamId => {
           const teamDoc = await db.collection('teams').doc(teamId).get();
           if (teamDoc.exists) {
             const teamData = teamDoc.data();
@@ -212,8 +222,9 @@ exports.updateProfile = functions.https.onCall(async (data, context) => {
       transaction.update(userDoc.ref, updates);
       
       // Update team rosters if display name or initials changed
-      if ((updates.displayName || updates.initials) && userData.teams) {
-        const teamUpdates = userData.teams.map(async teamId => {
+      const teamIds = userData.teams ? Object.keys(userData.teams) : [];
+      if ((updates.displayName || updates.initials) && teamIds.length > 0) {
+        const teamUpdates = teamIds.map(async teamId => {
           const teamRef = db.collection('teams').doc(teamId);
           const teamDoc = await transaction.get(teamRef);
           

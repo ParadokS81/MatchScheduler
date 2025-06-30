@@ -3,7 +3,7 @@
  * Manages authentication state and user profiles
  */
 
-import { getAuth, getDb } from '../config/firebase.js';
+import { getAuth, getDb, getFunctions } from '../config/firebase.js';
 import { isDevelopment } from '../config/firebase.js';
 import stateService from './state.js';
 
@@ -52,17 +52,47 @@ const AuthService = (() => {
    * @returns {Promise<Object|null>} User profile or null if not found
    */
   const fetchUserProfile = async (uid) => {
+    console.log('🔍 fetchUserProfile called for uid:', uid);
     try {
       const db = getDb();
+      console.log('📂 Getting user document from Firestore...');
       const doc = await db.collection('users').doc(uid).get();
+      console.log('📂 Document fetch result:', { exists: doc.exists, id: doc.id });
       
       if (!doc.exists) {
-        console.log('No profile found for user:', uid);
+        console.log('❌ No profile found for user:', uid);
         return null;
       }
 
       const profile = doc.data();
-      const teamIds = profile?.teams || [];
+      
+      // DEFENSIVE HANDLING: Handle legacy array format or malformed data
+      let teams = profile?.teams;
+      let needsMigration = false;
+      
+      if (!teams) {
+        // Handle null/undefined - use empty map
+        teams = {};
+      } else if (Array.isArray(teams)) {
+        // MIGRATION: Convert legacy array format to map
+        console.log('Migrating user teams from array to map format');
+        const teamsMap = {};
+        teams.forEach(teamId => {
+          if (teamId && typeof teamId === 'string') {
+            teamsMap[teamId] = true;
+          }
+        });
+        teams = teamsMap;
+        needsMigration = true;
+      } else if (typeof teams !== 'object') {
+        // Handle malformed data - reset to empty map
+        console.warn('Invalid teams data format, resetting to empty map');
+        teams = {};
+        needsMigration = true;
+      }
+
+      // Get team IDs safely from map
+      const teamIds = Object.keys(teams);
 
       // Fetch all teams in parallel
       const teamPromises = teamIds.map(async teamId => {
@@ -76,7 +106,7 @@ const AuthService = (() => {
           
           const teamData = teamDoc.data();
           // Only include active teams where user is still in playerRoster
-          if (teamData.status !== 'active') {
+          if (!teamData.active) {
             console.warn(`Team ${teamId} is not active - skipping`);
             return null;
           }
@@ -98,19 +128,23 @@ const AuthService = (() => {
       });
 
       // Wait for all team fetches to complete
-      const teams = (await Promise.all(teamPromises))
+      const fetchedTeams = (await Promise.all(teamPromises))
         .filter(team => team !== null);
 
-      // Check if we need to clean up the user's teams array
-      const validTeamIds = teams.map(team => team.id);
-      if (validTeamIds.length < teamIds.length) {
-        console.log('Cleaning up invalid team references...');
+      // Check if we need to clean up the user's teams map or migrate data
+      const validTeamIds = fetchedTeams.map(team => team.id);
+      if (validTeamIds.length < teamIds.length || needsMigration) {
+        console.log('Cleaning up invalid team references or migrating data...');
         try {
-          await db.collection('users').doc(uid).update({
-            teams: validTeamIds
+          const validTeamsMap = {};
+          validTeamIds.forEach(teamId => {
+            validTeamsMap[teamId] = true;
           });
-          // Update the profile's teams array to match
-          profile.teams = validTeamIds;
+          await db.collection('users').doc(uid).update({
+            teams: validTeamsMap
+          });
+          // Update the profile's teams map to match
+          profile.teams = validTeamsMap;
         } catch (error) {
           console.warn('Failed to clean up invalid team references:', error);
           // Non-critical error, continue with auth flow
@@ -120,7 +154,6 @@ const AuthService = (() => {
       return {
         uid,
         ...profile,
-        teams,
         lastLogin: new Date().toISOString()
       };
     } catch (error) {
@@ -155,24 +188,80 @@ const AuthService = (() => {
   };
 
   /**
+   * Debug logger that persists across page reloads
+   */
+  const debugLog = (message, data = null) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}`;
+    console.log(logEntry, data || '');
+    
+    // Also store in localStorage for debugging
+    try {
+      const logs = JSON.parse(localStorage.getItem('authDebugLogs') || '[]');
+      logs.push({ timestamp, message, data });
+      // Keep only last 50 entries
+      if (logs.length > 50) logs.splice(0, logs.length - 50);
+      localStorage.setItem('authDebugLogs', JSON.stringify(logs));
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+  };
+
+  /**
+   * View debug logs (call from console)
+   */
+  const viewDebugLogs = () => {
+    try {
+      const logs = JSON.parse(localStorage.getItem('authDebugLogs') || '[]');
+      console.log('📋 Auth Debug Logs:');
+      logs.forEach(log => {
+        console.log(`${log.timestamp}: ${log.message}`, log.data || '');
+      });
+      return logs;
+    } catch (e) {
+      console.log('No debug logs found');
+      return [];
+    }
+  };
+
+  // Make viewDebugLogs available globally for debugging
+  window.viewAuthDebugLogs = viewDebugLogs;
+
+  /**
    * Handle auth state changes
    * @param {Object|null} firebaseUser - Firebase user object
    */
   const handleAuthStateChanged = async (firebaseUser) => {
+    debugLog('🔄 AUTH STATE CHANGE - Start processing...');
+    
     try {
-      // Ensure State Service is ready
-      await waitForStateService();
+              // Ensure State Service is ready
+        debugLog('⏳ Waiting for state service...');
+        await waitForStateService();
+        debugLog('✅ State service ready');
 
-      if (firebaseUser) {
-        console.log('👤 User signed in:', firebaseUser.email);
+        if (firebaseUser) {
+          debugLog('👤 User signed in:', firebaseUser.email);
+          debugLog('📋 User details:', {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL
+          });
         
         // Reset retry counter
         retryAttempts = 0;
         
         // Fetch user profile
+        console.log('🔍 Fetching user profile...');
         const profile = await fetchUserProfile(firebaseUser.uid);
+        console.log('📄 Profile fetched:', profile ? 'Profile exists' : 'No profile found');
+        if (profile) {
+          console.log('📄 Profile data:', profile);
+        }
         
         // Update state with user info
+        console.log('🔄 Updating user state...');
         stateService.setState('user', {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -180,47 +269,61 @@ const AuthService = (() => {
           photoURL: firebaseUser.photoURL,
           profile // Might be null if profile doesn't exist
         });
+        console.log('✅ User state updated');
 
         // Handle team selection
-        if (profile?.teams?.length > 0) {
+        const userTeamIds = profile?.teams ? Object.keys(profile.teams) : [];
+        console.log('🏆 User teams:', userTeamIds);
+        
+        if (userTeamIds.length > 0) {
           // Get previously selected team from local storage if it exists
           const lastTeamId = localStorage.getItem(`lastTeam_${firebaseUser.uid}`);
+          console.log('💾 Last team from storage:', lastTeamId);
           
           // Check if last team is still valid
-          const lastTeamStillValid = profile.teams.some(team => team.id === lastTeamId);
+          const lastTeamStillValid = userTeamIds.includes(lastTeamId);
           
           if (lastTeamStillValid) {
             // Restore last selected team
+            console.log('✅ Restoring last team:', lastTeamId);
             stateService.setState('currentTeam', lastTeamId);
-          } else if (profile.teams.length === 1) {
+          } else if (userTeamIds.length === 1) {
             // Auto-select if user has exactly one team
-            const teamId = profile.teams[0].id;
+            const teamId = userTeamIds[0];
+            console.log('🎯 Auto-selecting single team:', teamId);
             stateService.setState('currentTeam', teamId);
             localStorage.setItem(`lastTeam_${firebaseUser.uid}`, teamId);
           } else {
             // Clear team selection if last team is invalid and user has multiple teams
+            console.log('🚫 Clearing team selection (multiple teams, no valid last team)');
             stateService.setState('currentTeam', null);
             localStorage.removeItem(`lastTeam_${firebaseUser.uid}`);
           }
         } else {
           // No teams - clear selection and storage
+          console.log('🚫 No teams - clearing team selection');
           stateService.setState('currentTeam', null);
           localStorage.removeItem(`lastTeam_${firebaseUser.uid}`);
         }
 
         // Update last login if profile exists
         if (profile) {
+          console.log('⏰ Updating last login...');
           updateLastLogin(firebaseUser.uid).catch(console.warn);
         }
+        
+        console.log('✅ AUTH STATE CHANGE - Complete (signed in)');
       } else {
         console.log('👤 User signed out');
         // Clear user-related state and storage
         stateService.setState('user', null);
         stateService.setState('currentTeam', null);
         stateService.setState('favorites', []);
+        console.log('✅ AUTH STATE CHANGE - Complete (signed out)');
       }
     } catch (error) {
-      console.error('Error in auth state change handler:', error);
+      console.error('❌ ERROR in auth state change handler:', error);
+      console.error('❌ Error stack:', error.stack);
       // Reset state on error but don't sign out - let Firebase auth state persist
       stateService.setState('user', null);
       stateService.setState('currentTeam', null);
@@ -258,11 +361,14 @@ const AuthService = (() => {
         prompt: 'select_account'
       });
       
-      // Always use signInWithRedirect for consistency between emulator and production
-      await auth.signInWithRedirect(provider);
+      // Try popup method instead of redirect to avoid domain issues
+      debugLog('🚀 Starting Google sign-in with popup...');
+      const result = await auth.signInWithPopup(provider);
+      debugLog('✅ Sign-in popup completed:', result.user ? 'Success' : 'Failed');
       
       // Auth state listener will handle the rest
     } catch (error) {
+      debugLog('❌ Google sign-in failed:', error.message);
       console.error('Google sign-in failed:', error);
       throw new Error('Sign-in failed. Please try again.');
     }
@@ -284,7 +390,7 @@ const AuthService = (() => {
   };
 
   /**
-   * Create or update user profile
+   * Create or update user profile using Cloud Functions
    * @param {Object} profileData - Profile data to save
    * @returns {Promise<Object>} Updated profile
    */
@@ -297,44 +403,40 @@ const AuthService = (() => {
     }
 
     try {
-      const db = getDb();
-      const profileRef = db.collection('users').doc(user.uid);
+      const functions = getFunctions();
       
-      // Ensure required fields
-      const now = new Date().toISOString();
-      const profile = {
-        ...profileData,
-        displayName: profileData.displayName || user.displayName,
-        initials: profileData.initials || generateInitials(profileData.displayName || user.displayName),
-        updatedAt: now,
-        teams: profileData.teams || [],
-      };
+      // Check if profile exists to determine which function to call
+      const existingProfile = await fetchUserProfile(user.uid);
+      const functionName = existingProfile ? 'updateProfile' : 'createProfile';
+      
+      console.log(`AuthService: Calling ${functionName} with data:`, profileData);
+      
+      // Call the appropriate Cloud Function
+      const result = await functions.httpsCallable(functionName)(profileData);
+      
+      if (result.data.success) {
+        console.log('AuthService: Profile operation successful');
+        
+        // Use the data returned by the Cloud Function instead of fetching again
+        // This avoids timing issues with Firestore eventual consistency
+        const profileData = result.data.data;
+        
+        // Update state with the profile data from the function response
+        stateService.setState('user', {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          profile: profileData
+        });
 
-      // Add createdAt only if it's a new profile
-      const doc = await profileRef.get();
-      if (!doc.exists) {
-        profile.createdAt = now;
+        return profileData;
+      } else {
+        throw new Error(result.data.message || 'Profile operation failed');
       }
-
-      // Merge with existing data
-      await profileRef.set(profile, { merge: true });
-
-      // Fetch and return updated profile
-      const updatedProfile = await fetchUserProfile(user.uid);
-      
-      // Update state
-      stateService.setState('user', {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        profile: updatedProfile
-      });
-
-      return updatedProfile;
     } catch (error) {
       console.error('Profile update failed:', error);
-      throw new Error('Failed to update profile');
+      throw new Error(error.message || 'Failed to update profile');
     }
   };
 

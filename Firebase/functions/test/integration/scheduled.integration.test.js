@@ -21,7 +21,8 @@ describe('Scheduled Function Tests', () => {
     await db.collection('teams').doc('old-team').set({
       teamId: 'old-team',
       teamName: 'Old Team',
-      status: 'active',
+      active: true,
+      archived: false,
       lastActivityAt: fifteenDaysAgo,
       joinCode: 'OLD123',
       joinCodeCreatedAt: now,
@@ -33,7 +34,8 @@ describe('Scheduled Function Tests', () => {
     await db.collection('teams').doc('new-team').set({
       teamId: 'new-team',
       teamName: 'New Team', 
-      status: 'active',
+      active: true,
+      archived: false,
       lastActivityAt: now,
       joinCode: 'NEW123',
       joinCodeCreatedAt: now,
@@ -48,8 +50,8 @@ describe('Scheduled Function Tests', () => {
     const oldTeam = await db.collection('teams').doc('old-team').get();
     const newTeam = await db.collection('teams').doc('new-team').get();
 
-    expect(oldTeam.data().status).toBe('inactive');
-    expect(newTeam.data().status).toBe('active');
+    expect(oldTeam.data().active).toBe(false);
+    expect(newTeam.data().active).toBe(true);
   });
 
   it('should regenerate old join codes', async () => {
@@ -60,7 +62,8 @@ describe('Scheduled Function Tests', () => {
     await db.collection('teams').doc('team-1').set({
       teamId: 'team-1',
       teamName: 'Team 1',
-      status: 'active',
+      active: true,
+      archived: false,
       lastActivityAt: now,
       joinCode: 'OLD456',
       joinCodeCreatedAt: thirtyOneDaysAgo,

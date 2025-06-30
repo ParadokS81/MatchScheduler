@@ -9,6 +9,11 @@ import stateService from '../services/state.js';
 import authService from '../services/auth.js';
 import databaseService from '../services/database.js';
 
+// Expose services globally for debugging
+window.AuthService = authService;
+window.stateService = stateService;
+window.databaseService = databaseService;
+
 const App = (function() {
   // Private variables
   let initialized = false;
@@ -85,14 +90,17 @@ const App = (function() {
     const user = stateService.getState('user');
     const currentTeam = stateService.getState('currentTeam');
     
-    if (!user || !user.teams || user.teams.length === 0) {
+    // DEFENSIVE: Safe team counting using helper function
+    const teamCount = getTeamCount(user?.teams);
+    if (!user || teamCount === 0) {
       // No teams - hide switcher
       teamSwitcher.innerHTML = '';
       return;
     }
 
     // Always show 2 button slots for consistency
-    const userTeams = user.teams || [];
+    // DEFENSIVE: Safe team ID extraction using helper function
+    const userTeams = getTeamIds(user.profile?.teams);
     const teamData = stateService.getState('teamData');
     
     // Get team names (use current team data if available, otherwise use ID)
@@ -488,9 +496,34 @@ const App = (function() {
     }
   };
 
+  // Helper functions for safe team operations
+  const getTeamCount = (teams) => {
+    if (!teams || typeof teams !== 'object' || Array.isArray(teams)) {
+      return 0;
+    }
+    return Object.keys(teams).length;
+  };
+
+  const getTeamIds = (teams) => {
+    if (!teams || typeof teams !== 'object' || Array.isArray(teams)) {
+      return [];
+    }
+    return Object.keys(teams);
+  };
+
+  const isUserInTeam = (teams, teamId) => {
+    if (!teams || typeof teams !== 'object' || Array.isArray(teams) || !teamId) {
+      return false;
+    }
+    return teams[teamId] === true;
+  };
+
+
+
   // Public API
   return {
     init,
+    cleanup,
     getCurrentWeekOffset,
     requestWeekChange,
     getCurrentTeam,

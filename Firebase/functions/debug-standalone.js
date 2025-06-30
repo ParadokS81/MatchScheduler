@@ -2,7 +2,7 @@ const admin = require('firebase-admin');
 
 // Initialize admin first
 admin.initializeApp({
-  projectId: 'quakeworld-match-scheduler'
+  projectId: 'matchscheduler-dev'
 });
 
 console.log('=== STANDALONE DEBUG ===');

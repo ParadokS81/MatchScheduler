@@ -8,7 +8,7 @@ describe('Debug Rules Evaluation', () => {
   beforeAll(async () => {
     // Initialize test environment with actual rules
     testEnv = await initializeTestEnvironment({
-      projectId: 'quakeworld-match-scheduler',
+      projectId: 'matchscheduler-dev',
       firestore: {
         rules: readFileSync('../firestore.rules', 'utf8')
       }

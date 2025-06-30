@@ -12,7 +12,7 @@ describe('Firestore Security Rules Integration Tests', () => {
     const rules = fs.readFileSync(rulesPath, 'utf8');
     
     testEnv = await initializeTestEnvironment({
-      projectId: 'quakeworld-match-scheduler',
+      projectId: 'matchscheduler-dev',
       firestore: {
         rules: rules,
         host: 'localhost',
@@ -355,7 +355,7 @@ describe('Firestore Security Rules Integration Tests', () => {
         authenticatedDb.collection('teams').doc('new-team').set({
           teamId: 'new-team',
           teamName: 'New Team',
-          teamLeader: testUser.uid,
+          leaderId: testUser.uid,
           playerRoster: [],
           maxPlayers: 4,
           active: true,

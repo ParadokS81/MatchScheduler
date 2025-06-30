@@ -5,12 +5,12 @@
 
 // Firebase App Configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAy7k2ivo3x0LBLM0GKG6-AAaKfP8-snbs",
-  authDomain: "quakeworld-match-scheduler.firebaseapp.com",
-  projectId: "quakeworld-match-scheduler",
-  storageBucket: "quakeworld-match-scheduler.appspot.com",
-  messagingSenderId: "697734297374",
-  appId: "1:697734297374:web:40a0310889774e56a87b0f"
+  apiKey: "AIzaSyAElazBT8eT13fT0wCO5K7z3-5D1z42ZBM",
+  authDomain: "matchscheduler-dev.firebaseapp.com",
+  projectId: "matchscheduler-dev",
+  storageBucket: "matchscheduler-dev.firebasestorage.app",
+  messagingSenderId: "340309534131",
+  appId: "1:340309534131:web:77155fb67f95ec2816d7c6"
 };
 
 // Environment detection - more robust than just localhost
@@ -51,6 +51,11 @@ const initializeFirebase = async () => {
   initializationPromise = (async () => {
     try {
       console.log('🔥 Initializing Firebase...');
+      console.log('🔍 Current initialization state:', { 
+        firebaseInitialized, 
+        hasError: !!initializationError,
+        promiseExists: !!initializationPromise 
+      });
       
       // Check if Firebase SDK is loaded
       if (typeof firebase === 'undefined') {
@@ -58,40 +63,48 @@ const initializeFirebase = async () => {
       }
 
       // Initialize Firebase App if not already initialized
-      app = firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(firebaseConfig);
+      console.log(`🔍 Checking Firebase apps: ${firebase.apps.length} existing apps`);
+      if (firebase.apps.length > 0) {
+        console.log(`📱 Using existing Firebase app: ${firebase.apps[0].name}`);
+        app = firebase.apps[0];
+      } else {
+        console.log('📱 Creating new Firebase app...');
+        app = firebase.initializeApp(firebaseConfig);
+      }
       console.log(`✓ Firebase app initialized for project: ${firebaseConfig.projectId}`);
 
       // Initialize Services
       auth = firebase.auth();
       db = firebase.firestore();
-      functions = firebase.functions();
+      functions = firebase.functions(); // Initialize without region for emulator
       console.log('✓ Firebase services initialized');
 
-      // Configure emulators in development
+      // Hybrid setup: Local functions, Live Auth & Firestore
       if (isDevelopment()) {
-        console.log('🔧 Development environment detected - configuring emulators...');
+        console.log('🔧 Development environment - using HYBRID setup:');
+        console.log('  📱 Functions: Local emulator (localhost:5001)');
+        console.log('  ☁️ Auth: Live Firebase');
+        console.log('  ☁️ Firestore: Live Firebase');
         
-        // Configure emulators BEFORE setting persistence
-        auth.useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-        db.useEmulator('127.0.0.1', 8080);
-        functions.useEmulator('127.0.0.1', 5001);
+        // Configure functions emulator BEFORE using functions
+        functions.useEmulator('localhost', 5001);
+        console.log('🔧 Functions emulator configured for localhost:5001');
         
-        // Set auth persistence to LOCAL for development
-        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        // Test the configuration
+        console.log('🔍 Functions emulator URL should be: http://localhost:5001/createTeam');
+        console.log('🌍 Functions region: europe-west10');
         
-        // Enable offline persistence for Firestore
-        await db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-          } else if (err.code === 'unimplemented') {
-            console.warn('Browser doesn\'t support persistence.');
-          }
-        });
-        
-        console.log('✓ Emulators configured');
+        console.log('✅ Hybrid configuration complete');
       } else {
-        console.log('🚀 Production environment detected');
-        // Enable offline persistence for Firestore in production
+        console.log('🚀 Production environment - using live Firebase services');
+      }
+      
+      // Set auth persistence to LOCAL for all environments
+      await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      
+      // Only enable Firestore persistence in full local development (not hybrid)
+      // Hybrid setup (live Firestore + local functions) can cause persistence conflicts
+      if (isDevelopment() && false) { // Disabled for hybrid setup
         await db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
           if (err.code === 'failed-precondition') {
             console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');

@@ -44,7 +44,8 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
     const userData = userDoc.data();
 
     // 3. Check user's team count
-    if (userData.teams && userData.teams.length >= 2) {
+    const teamCount = userData.teams ? Object.keys(userData.teams).length : 0;
+    if (teamCount >= 2) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'You can only be a member of up to 2 teams.'
@@ -84,7 +85,8 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       const existingTeamQuery = await transaction.get(
         db.collection('teams')
           .where('teamName', '==', teamName.trim())
-          .where('status', '==', 'active')
+          .where('active', '==', true)
+          .where('archived', '==', false)
       );
       
       if (!existingTeamQuery.empty) {
@@ -117,7 +119,8 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
         divisions: divisions,
         joinCode: joinCode,
         joinCodeCreatedAt: now,
-        status: 'active',
+        active: true,      // Team starts active
+        archived: false,   // Team is not deleted
         createdAt: now,
         lastActivityAt: now,
         playerRoster: [{
@@ -131,10 +134,13 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       // Create team
       transaction.set(teamRef, teamData);
 
-      // 11. Update user's teams array using proper Firebase method
+      // 11. Update user's teams map using proper Firebase method
+      // Note: Security rules expect teams to be a map, not an array
+      const currentTeams = userData.teams || {};
+      const updatedTeams = { ...currentTeams, [teamRef.id]: true };
+      
       transaction.update(userDoc.ref, {
-        teams: FieldValue.arrayUnion(teamRef.id),
-        updatedAt: now
+        teams: updatedTeams
       });
 
       return {

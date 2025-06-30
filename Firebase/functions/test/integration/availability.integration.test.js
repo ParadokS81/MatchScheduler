@@ -170,7 +170,8 @@ describe('Availability Management Tests', () => {
     it('should handle archived teams', async () => {
       // Archive team
       await db.collection('teams').doc(teamId).update({
-        status: 'archived'
+        active: false,
+        archived: true
       });
 
       // Try to update availability - currently allows updates to archived teams

@@ -80,15 +80,25 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
         lastActivityAt: now
       };
 
-      // Archive if empty
+      // Archive permanently if empty
       if (newRoster.length === 0) {
-        teamUpdate.status = 'archived';
+        teamUpdate.active = false;
+        teamUpdate.archived = true;  // Permanently archived - not recoverable
       }
+
+      // Get current user data to update teams map
+      const userDoc = await transaction.get(userRef);
+      const userData = userDoc.data();
+      const currentTeams = userData.teams || {};
+      
+      // Remove this team from the teams map
+      const updatedTeams = { ...currentTeams };
+      delete updatedTeams[teamId];
 
       // Perform atomic updates
       transaction.update(teamRef, teamUpdate);
       transaction.update(userRef, {
-        teams: FieldValue.arrayRemove(teamId),
+        teams: updatedTeams,
         updatedAt: now
       });
     });
