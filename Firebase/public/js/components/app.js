@@ -27,6 +27,8 @@ const App = (function() {
 
   // Track current team subscription for cleanup during rapid changes
   let currentTeamUnsubscribe = null;
+  let currentUserUnsubscribe = null;
+  let currentSubscribedUserId = null; // Track which user we're subscribed to
   let titleUpdateTimeout = null;
 
   /**
@@ -173,6 +175,22 @@ const App = (function() {
   };
 
   /**
+   * Clean up current user profile subscription
+   */
+  const cleanupUserSubscription = () => {
+    if (currentUserUnsubscribe) {
+      try {
+        currentUserUnsubscribe();
+        databaseSubscriptions.delete(currentUserUnsubscribe);
+      } catch (error) {
+        console.warn('App: Error cleaning up user subscription:', error);
+      }
+      currentUserUnsubscribe = null;
+      currentSubscribedUserId = null;
+    }
+  };
+
+  /**
    * Subscribe to team updates with debouncing for rapid changes
    * @param {string} teamId - Team ID to subscribe to
    * @returns {Promise<void>}
@@ -214,15 +232,125 @@ const App = (function() {
   };
 
   /**
+   * Subscribe to user profile updates to detect team membership changes
+   * @param {string} userId - User ID to subscribe to
+   * @returns {Promise<void>}
+   */
+  const subscribeToUserUpdates = async (userId) => {
+    console.log('🔗 Setting up user profile subscription for:', userId);
+    
+    // Prevent re-subscribing to the same user
+    if (currentSubscribedUserId === userId && currentUserUnsubscribe) {
+      console.log('🔄 Already subscribed to this user, skipping');
+      return;
+    }
+    
+    // Clean up existing subscription first
+    cleanupUserSubscription();
+    currentSubscribedUserId = userId;
+
+    try {
+      // Set up new subscription
+      currentUserUnsubscribe = databaseService.subscribeToUser(userId, (userProfile, error) => {
+        console.log('🔔 User profile subscription triggered:', { userId, error: !!error, hasProfile: !!userProfile });
+        
+        if (error) {
+          console.error('App: User profile subscription error:', error);
+          return;
+        }
+
+        if (!userProfile) {
+          console.warn(`App: User profile ${userId} not found`);
+          return;
+        }
+
+        console.log('👤 User profile data received:', {
+          userId,
+          teams: userProfile.teams,
+          teamCount: Object.keys(userProfile.teams || {}).length
+        });
+
+        // Update user state with fresh profile data
+        const currentUser = stateService.getState('user');
+        const currentTeamId = stateService.getState('currentTeam');
+        
+        console.log('🔍 Current state before update:', {
+          hasCurrentUser: !!currentUser,
+          currentTeamId,
+          userTeams: Object.keys(userProfile.teams || {})
+        });
+        
+        if (currentUser) {
+          // Only update user state if profile data has actually changed
+          const currentProfile = currentUser.profile;
+          const profileChanged = !currentProfile || 
+            JSON.stringify(currentProfile.teams || {}) !== JSON.stringify(userProfile.teams || {});
+          
+          if (profileChanged) {
+            stateService.setState('user', {
+              ...currentUser,
+              profile: userProfile
+            });
+            console.log('✅ User state updated with fresh profile');
+          } else {
+            console.log('🔄 Profile data unchanged, skipping state update');
+          }
+
+          // Check if current team is still valid
+          const userTeamIds = Object.keys(userProfile.teams || {});
+          
+          console.log('🎯 Team validation:', {
+            currentTeamId,
+            userTeamIds,
+            isTeamStillValid: currentTeamId ? userTeamIds.includes(currentTeamId) : 'no current team'
+          });
+          
+          if (currentTeamId && !userTeamIds.includes(currentTeamId)) {
+            // User was kicked from current team
+            console.log(`🚨 User was removed from team ${currentTeamId}, clearing team selection`);
+            stateService.setState('currentTeam', null);
+            stateService.setState('teamData', null);
+            
+            // Show notification to user
+            handleError(new Error('You have been removed from the team'));
+            
+            // Update team switcher to reflect change
+            updateTeamSwitcher();
+            
+            console.log('🔄 Team selection cleared, UI should update to Join/Create state');
+          } else {
+            console.log('✅ Current team is still valid or no team selected');
+          }
+        } else {
+          console.warn('⚠️ No current user in state, cannot update profile');
+        }
+      });
+
+      // Track for cleanup
+      databaseSubscriptions.add(currentUserUnsubscribe);
+      console.log('✅ User profile subscription established successfully');
+
+    } catch (error) {
+      console.error('❌ App: Failed to subscribe to user updates:', error);
+    }
+  };
+
+  /**
    * Set up state change subscriptions
    */
   const setupStateSubscriptions = () => {
     // User state changes
-    subscribeToState('user', (user) => {
+    subscribeToState('user', async (user) => {
       if (user) {
         console.log('App: User signed in, updating UI...');
         document.body.classList.add('authenticated');
         updateTeamSwitcher(); // Update team switcher when user signs in
+        
+        // Subscribe to user profile changes to detect team membership changes
+        if (user.uid) {
+          await subscribeToUserUpdates(user.uid);
+        }
+        
         refreshData();
       } else {
         console.log('App: User signed out, resetting UI...');
@@ -350,6 +478,9 @@ const App = (function() {
   const cleanup = () => {
     // Clean up team subscription first
     cleanupTeamSubscription();
+    
+    // Clean up user profile subscription
+    cleanupUserSubscription();
 
     // Clear state subscriptions
     stateSubscriptions.forEach(unsubscribe => {

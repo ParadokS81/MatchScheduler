@@ -4,6 +4,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require("firebase-admin/firestore");
+const { EVENT_TYPES, logTeamLifecycleEvent } = require('../utils/helpers');
 
 // Constants
 const MAX_SLOTS_PER_REQUEST = 154;  // Exactly 2 weeks (7 days × 11 slots × 2)
@@ -196,6 +197,20 @@ exports.updateAvailability = functions.https.onCall(async (data, context) => {
       // Reactivate team if it's inactive (but not if permanently archived)
       if (!teamData.active && !teamData.archived) {
         teamUpdate.active = true;  // Silent reactivation from inactive state
+        
+        // Log team reactivation event
+        await logTeamLifecycleEvent(db, transaction, EVENT_TYPES.TEAM_ACTIVE, {
+          teamId: teamId,
+          teamName: teamData.teamName,
+          details: {
+            reactivatedBy: {
+              displayName: userData.displayName,
+              initials: userData.initials
+            },
+            reactivationTrigger: 'availabilityUpdate',
+            weekId: weekId
+          }
+        });
       }
 
       // Perform atomic updates

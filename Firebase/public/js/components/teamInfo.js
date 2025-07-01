@@ -39,6 +39,20 @@ const TeamInfo = (function() {
         return teams[teamId] === true;
     };
 
+    // Safe user ID extraction utility
+    const getSafeUserId = (user) => {
+        try {
+            if (AuthService && typeof AuthService.getUserId === 'function') {
+                return AuthService.getUserId(user);
+            }
+        } catch (error) {
+            console.warn('TeamInfo: AuthService.getUserId failed:', error);
+        }
+        
+        // Fallback to direct extraction
+        return user?.uid || user?.profile?.uid || null;
+    };
+
     /**
      * Initialize the component
      * @param {string} panelId - ID of the panel element to render into
@@ -58,8 +72,9 @@ const TeamInfo = (function() {
         subscribe('currentTeam', handleTeamStateChange);
         subscribe('teamData', handleTeamDataChange);
 
-        // Add event delegation for button clicks
+        // Add event delegation for button clicks and form changes
         panel.addEventListener('click', handlePanelClick);
+        panel.addEventListener('change', handlePanelChange);
 
         // Initial render
         render();
@@ -86,6 +101,24 @@ const TeamInfo = (function() {
             handleCopyJoinCodeClick();
         } else if (target.matches('.regenerate-join-code-btn')) {
             handleRegenerateJoinCodeClick();
+        } else if (target.matches('.transfer-leadership-btn')) {
+            handleTransferLeadershipClick();
+        } else if (target.matches('.kick-players-btn')) {
+            handleKickPlayersClick();
+        } else if (target.matches('.leave-team-btn')) {
+            handleLeaveTeamClick();
+        }
+    }
+
+    /**
+     * Handle panel change events using event delegation
+     * @param {Event} event - Change event
+     */
+    function handlePanelChange(event) {
+        const target = event.target;
+        
+        if (target.matches('.max-players-select')) {
+            handleMaxPlayersChange(target);
         }
     }
 
@@ -149,9 +182,8 @@ const TeamInfo = (function() {
      * Handle join/create team button click (for second team slot)
      */
     function handleJoinCreateTeamClick() {
-        // For now, show create team modal - we can enhance this later with a choice dialog
         console.log('TeamInfo: Join/Create Team button clicked');
-        Modals.showCreateTeamModal();
+        Modals.showJoinCreateChoiceModal();
     }
 
     /**
@@ -232,6 +264,94 @@ const TeamInfo = (function() {
             console.error('TeamInfo: Failed to regenerate join code:', error);
             showToast('Failed to regenerate join code. Please try again.', 'error');
         }
+    }
+
+    /**
+     * Handle max players dropdown change
+     */
+    async function handleMaxPlayersChange(selectElement) {
+        const teamData = StateService.getState('teamData');
+        if (!teamData) {
+            console.warn('TeamInfo: No team data available');
+            return;
+        }
+
+        const newMaxPlayers = parseInt(selectElement.value);
+        const errorDiv = panel.querySelector('.max-players-error');
+        
+        // Clear any previous error
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = '';
+        }
+
+        try {
+            console.log('TeamInfo: Updating max players to:', newMaxPlayers);
+            
+            // Import database service dynamically
+            const { default: DatabaseService } = await import('../services/database.js');
+            
+            await DatabaseService.updateTeamSettings({ 
+                teamId: teamData.id, 
+                maxPlayers: newMaxPlayers 
+            });
+            
+            console.log('TeamInfo: Max players updated successfully');
+        } catch (error) {
+            console.error('TeamInfo: Failed to update max players:', error);
+            
+            // Show error message
+            if (errorDiv) {
+                errorDiv.textContent = 'Failed to update max players. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+            
+            // Revert dropdown to original value
+            selectElement.value = teamData.maxPlayers;
+        }
+    }
+
+    /**
+     * Handle transfer leadership button click
+     */
+    function handleTransferLeadershipClick() {
+        const teamData = StateService.getState('teamData');
+        console.log('TeamInfo: Transfer Leadership clicked for team:', teamData?.teamName);
+        console.log('TeamInfo: Current leader:', teamData?.leaderId);
+        console.log('TeamInfo: Available players:', teamData?.playerRoster);
+        
+        // Show transfer leadership modal
+        Modals.showTransferLeadershipModal();
+    }
+
+    /**
+     * Handle kick players button click
+     */
+    function handleKickPlayersClick() {
+        const teamData = StateService.getState('teamData');
+        console.log('TeamInfo: Kick Players clicked for team:', teamData?.teamName);
+        console.log('TeamInfo: Current roster:', teamData?.playerRoster);
+        
+        // Show kick players modal
+        Modals.showKickPlayersModal();
+    }
+
+    /**
+     * Handle leave team button click
+     */
+    function handleLeaveTeamClick() {
+        const teamData = StateService.getState('teamData');
+        const user = StateService.getState('user');
+        
+        const userId = getSafeUserId(user);
+        
+        console.log('TeamInfo: Leave Team clicked');
+        console.log('TeamInfo: Team:', teamData?.teamName);
+        console.log('TeamInfo: User leaving:', userId);
+        console.log('TeamInfo: Is leader:', teamData?.leaderId === userId);
+        
+        // Show leave team modal with role-based logic
+        Modals.showLeaveTeamModal();
     }
 
     /**
@@ -367,6 +487,14 @@ const TeamInfo = (function() {
         const currentTeam = StateService.getState('currentTeam');
         const teamData = StateService.getState('teamData');
 
+        console.log('🎨 TeamInfo render called:', {
+            hasUser: !!user,
+            userTeams: user?.profile?.teams ? Object.keys(user.profile.teams) : 'no teams',
+            currentTeam,
+            hasTeamData: !!teamData,
+            teamDataId: teamData?.id
+        });
+
         // Show team management buttons if user is not signed in
         if (!user) {
             renderGuestState();
@@ -417,8 +545,17 @@ const TeamInfo = (function() {
         const team1 = userTeams[0] || null;
         const team2 = userTeams[1] || null;
         
+        console.log('🔄 renderTeamSwitcherLayout:', {
+            userTeams,
+            team1,
+            team2,
+            currentTeam,
+            hasTeamData: !!teamData
+        });
+        
         // If user has no teams, show the join/create state
         if (!team1) {
+            console.log('📭 No teams found, showing join/create state');
             renderNoTeamsState();
             return;
         }
@@ -430,6 +567,8 @@ const TeamInfo = (function() {
             StateService.setState('currentTeam', teamId);
             return; // Will re-render with the team selected
         }
+        
+
         
         // Trigger team name loading for any teams that aren't cached
         const teamsToLoad = [team1, team2].filter(teamId => {
@@ -503,7 +642,9 @@ const TeamInfo = (function() {
      * @param {Object} user - Current user data
      */
     function renderTeamContent(teamData, user) {
+        // Use playerRoster array directly
         const roster = teamData.playerRoster || [];
+        
         const logoUrl = teamData.teamLogoUrl || '/assets/images/default-team-logo.png';
         
         return `
@@ -558,7 +699,7 @@ const TeamInfo = (function() {
                 </button>
                 
                 <!-- Drawer Content -->
-                <div class="p-4 space-y-4 overflow-y-auto" style="height: calc(100% - 32px);">
+                <div class="p-4 overflow-y-auto" style="height: calc(100% - 32px); display: flex; flex-direction: column;">
                     ${renderTeamManagementContent(teamData, user)}
                 </div>
             </div>
@@ -587,58 +728,136 @@ const TeamInfo = (function() {
             `;
         }
 
-        // Try different possible user ID properties
-        const userId = user.id || user.uid || user.profile?.id || user.profile?.uid;
+        // Get user ID using safe accessor
+        const userId = getSafeUserId(user);
+        
         const isTeamLeader = teamData.leaderId === userId;
         
         console.log('TeamInfo: isTeamLeader check:', {
             teamLeaderId: teamData.leaderId,
-            'user.id': user.id,
-            'user.uid': user.uid,
-            'user.profile?.id': user.profile?.id,
-            'user.profile?.uid': user.profile?.uid,
             'resolved userId': userId,
             isTeamLeader
         });
         
         if (!isTeamLeader) {
+            // Team member content
             return `
-                <div class="text-center py-8">
-                    <p class="text-sm text-slate-400">Team member features coming soon...</p>
-                    <p class="text-xs text-slate-500 mt-2">Settings and preferences will be available here.</p>
-                    <p class="text-xs text-slate-600 mt-1">Debug: Leader=${teamData.leaderId}, You=${userId}</p>
+                <!-- Join Code Section - Read Only -->
+                <div style="display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.75rem;">
+                    <span style="font-size: 0.875rem; font-weight: 500; color: rgb(203 213 225); min-width: 5rem;">Join Code</span>
+                    <div style="width: 5rem; background-color: rgb(51 65 85); border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace; color: rgb(226 232 240); border: 1px solid rgb(75 85 99); text-align: center; height: 1.75rem; display: flex; align-items: center; justify-content: center;">
+                        ${teamData.joinCode || 'Loading...'}
+                    </div>
+                    <button class="copy-join-code-btn" 
+                            style="padding: 0.25rem; background-color: rgb(75 85 99); border-radius: 0.25rem; color: rgb(203 213 225); border: none; cursor: pointer; transition: background-color 0.2s; width: 1.75rem; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                            onmouseover="this.style.backgroundColor='rgb(107 114 128)'"
+                            onmouseout="this.style.backgroundColor='rgb(75 85 99)'"
+                            title="Copy join code">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                            <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Max Players Section - Read Only -->
+                <div style="display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.75rem;">
+                    <span style="font-size: 0.875rem; font-weight: 500; color: rgb(203 213 225); min-width: 5rem;">Max Players</span>
+                    <div style="width: 4rem; background-color: rgb(51 65 85); border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem; color: rgb(226 232 240); border: 1px solid rgb(75 85 99); height: 1.75rem; display: flex; align-items: center; justify-content: center; text-align: center;">
+                        ${teamData.maxPlayers || '0'}
+                    </div>
+                </div>
+
+                <!-- Logo Management Section - Space for future implementation -->
+                <div style="flex: 1; min-height: 6rem; margin-bottom: 1rem;">
+                    <!-- Logo management features will go here -->
+                </div>
+
+                <!-- Team Action Buttons - Only Leave Team for members -->
+                <div style="display: flex; flex-direction: column; gap: 0.375rem; margin-top: auto;">
+                    <button class="leave-team-btn" 
+                            style="width: 100%; padding: 0.375rem 0.75rem; background-color: rgb(239 68 68); border-radius: 0.25rem; color: white; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: background-color 0.2s; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                            onmouseover="this.style.backgroundColor='rgb(220 38 38)'"
+                            onmouseout="this.style.backgroundColor='rgb(239 68 68)'"
+                            title="Leave this team">
+                        Leave Team
+                    </button>
                 </div>
             `;
         }
 
         // Team leader content
         return `
-            <!-- Join Code Section -->
-            <div class="space-y-3">
-                <h3 class="text-sm font-medium text-slate-300">Join Code</h3>
-                <div class="flex items-center space-x-2">
-                    <div class="flex-1 bg-slate-700 rounded px-3 py-2 text-sm font-mono text-slate-200 border border-slate-600">
-                        ${teamData.joinCode || 'Loading...'}
-                    </div>
-                    <button class="copy-join-code-btn p-2 bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white rounded transition-colors" 
-                            title="Copy join code">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                            <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                        </svg>
-                    </button>
-                    <button class="regenerate-join-code-btn px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded transition-colors">
-                        Regenerate
-                    </button>
+            <!-- Join Code Section - Single Line -->
+            <div style="display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.875rem; font-weight: 500; color: rgb(203 213 225); min-width: 5rem;">Join Code</span>
+                <div style="width: 5rem; background-color: rgb(51 65 85); border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace; color: rgb(226 232 240); border: 1px solid rgb(75 85 99); text-align: center; height: 1.75rem; display: flex; align-items: center; justify-content: center;">
+                    ${teamData.joinCode || 'Loading...'}
                 </div>
-                <p class="text-xs text-slate-500">Share this code with players to join your team</p>
+                <button class="copy-join-code-btn" 
+                        style="padding: 0.25rem; background-color: rgb(75 85 99); border-radius: 0.25rem; color: rgb(203 213 225); border: none; cursor: pointer; transition: background-color 0.2s; width: 1.75rem; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.backgroundColor='rgb(107 114 128)'"
+                        onmouseout="this.style.backgroundColor='rgb(75 85 99)'"
+                        title="Copy join code">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                        <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                </button>
+                <button class="regenerate-join-code-btn" 
+                        style="padding: 0.25rem; background-color: rgb(234 88 12); border-radius: 0.25rem; color: white; border: none; cursor: pointer; transition: background-color 0.2s; width: 1.75rem; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.backgroundColor='rgb(194 65 12)'"
+                        onmouseout="this.style.backgroundColor='rgb(234 88 12)'"
+                        title="Regenerate join code">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M3 21v-5h5"/>
+                    </svg>
+                </button>
             </div>
 
-            <!-- Future sections will go here -->
-            <div class="border-t border-slate-600 pt-4">
-                <div class="text-center py-4">
-                    <p class="text-xs text-slate-500">More team management features coming soon...</p>
-                </div>
+            <!-- Max Players Section - Single Line -->
+            <div style="display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.875rem; font-weight: 500; color: rgb(203 213 225); min-width: 5rem;">Max Players</span>
+                <select class="max-players-select" 
+                        style="width: 4rem; background-color: rgb(51 65 85); border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem; color: rgb(226 232 240); border: 1px solid rgb(75 85 99); height: 1.75rem; cursor: pointer;">
+                    ${Array.from({length: 20}, (_, i) => i + 1).map(num => 
+                        `<option value="${num}" ${teamData.maxPlayers === num ? 'selected' : ''}>${num}</option>`
+                    ).join('')}
+                </select>
+                <div class="max-players-error" style="font-size: 0.75rem; color: rgb(239 68 68); display: none;"></div>
+            </div>
+
+            <!-- Logo Management Section - Space for future implementation -->
+            <div style="flex: 1; min-height: 6rem; margin-bottom: 1rem;">
+                <!-- Logo management features will go here -->
+            </div>
+
+            <!-- Team Action Buttons - Moved to bottom -->
+            <div style="display: flex; flex-direction: column; gap: 0.375rem; margin-top: auto;">
+                <button class="transfer-leadership-btn" 
+                        style="width: 100%; padding: 0.375rem 0.75rem; background-color: rgb(59 130 246); border-radius: 0.25rem; color: white; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: background-color 0.2s; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.backgroundColor='rgb(37 99 235)'"
+                        onmouseout="this.style.backgroundColor='rgb(59 130 246)'"
+                        title="Transfer team leadership to another player">
+                    Transfer Leadership
+                </button>
+                <button class="kick-players-btn" 
+                        style="width: 100%; padding: 0.375rem 0.75rem; background-color: rgb(234 88 12); border-radius: 0.25rem; color: white; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: background-color 0.2s; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.backgroundColor='rgb(194 65 12)'"
+                        onmouseout="this.style.backgroundColor='rgb(234 88 12)'"
+                        title="Remove players from team">
+                    Kick Players
+                </button>
+                <button class="leave-team-btn" 
+                        style="width: 100%; padding: 0.375rem 0.75rem; background-color: rgb(239 68 68); border-radius: 0.25rem; color: white; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: background-color 0.2s; height: 1.75rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.backgroundColor='rgb(220 38 38)'"
+                        onmouseout="this.style.backgroundColor='rgb(239 68 68)'"
+                        title="Leave this team">
+                    Leave Team
+                </button>
             </div>
         `;
     }

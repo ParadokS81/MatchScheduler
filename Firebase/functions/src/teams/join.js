@@ -4,18 +4,22 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require("firebase-admin/firestore");
+const { EVENT_TYPES, logPlayerMovementEvent } = require('../utils/helpers');
 
 exports.joinTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
   
   try {
+    console.log('🔧 JOIN TEAM FUNCTION CALLED - NEW VERSION WITH PROFILE CREATION');
+    console.log('📥 Received data:', { joinCode: data.joinCode, hasDisplayName: !!data.displayName, hasInitials: !!data.initials });
+    
     // 1. Check authentication
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to join a team.');
     }
 
     const userId = context.auth.uid;
-    const { joinCode } = data;
+    const { joinCode, displayName, initials } = data;
 
     // Basic join code format validation
     if (!joinCode || typeof joinCode !== 'string') {
@@ -28,12 +32,12 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
     // Get user reference for transaction
     const userRef = db.collection('users').doc(userId);
 
-    // Initial user check - just verify existence
+    // Initial user check - allow missing profile if profile data is provided
     const userDoc = await userRef.get();
-    if (!userDoc.exists) {
+    if (!userDoc.exists && (!displayName || !initials)) {
       throw new functions.https.HttpsError(
         'failed-precondition',
-        'User profile not found'
+        'User profile is required to join a team. Please provide displayName and initials.'
       );
     }
 
@@ -65,22 +69,47 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       // Get fresh user data inside transaction
       const freshUserDoc = await transaction.get(userRef);
       
-      // DEFENSIVE: Check if user document still exists
+      let freshUserData;
+      
+      // Handle profile creation if needed
       if (!freshUserDoc.exists) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'User profile not found'
-        );
-      }
-      
-      const freshUserData = freshUserDoc.data();
-      
-      // DEFENSIVE: Ensure user data is valid
-      if (!freshUserData) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'User profile data is invalid'
-        );
+        // Validate profile data
+        if (!displayName || typeof displayName !== 'string' || 
+            displayName.trim().length < 2 || displayName.trim().length > 20) {
+          throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Display name must be between 2 and 20 characters'
+          );
+        }
+        
+        if (!initials || typeof initials !== 'string' || initials.trim().length !== 3) {
+          throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Initials must be exactly 3 characters'
+          );
+        }
+
+        // Create new user profile
+        const timestamp = FieldValue.serverTimestamp();
+        freshUserData = {
+          userId: userId,
+          displayName: displayName.trim(),
+          initials: initials.trim().toUpperCase(),
+          teams: {},
+          createdAt: timestamp
+        };
+        
+        transaction.set(userRef, freshUserData);
+      } else {
+        freshUserData = freshUserDoc.data();
+        
+        // DEFENSIVE: Ensure user data is valid
+        if (!freshUserData) {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'User profile data is invalid'
+          );
+        }
       }
 
       // Double-check team count with fresh data - DEFENSIVE: Handle undefined teams
@@ -95,12 +124,19 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       }
 
       // Query for team with matching join code
+      console.log('🔍 Searching for team with joinCode:', joinCode.toUpperCase());
       const teamsQuery = await transaction.get(
         db.collection('teams')
           .where('joinCode', '==', joinCode.toUpperCase())
           .where('active', '==', true)
           .where('archived', '==', false)
       );
+
+      console.log('📊 Teams query result:', { 
+        empty: teamsQuery.empty, 
+        size: teamsQuery.size,
+        docs: teamsQuery.docs.map(doc => ({ id: doc.id, joinCode: doc.data().joinCode }))
+      });
 
       // Check if team exists with valid join code
       if (teamsQuery.empty) {
@@ -114,7 +150,7 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       const teamData = teamDoc.data();
 
       // Check if user is already on the team
-      if (teamData.playerRoster.some(player => player.userId === userId)) {
+      if (teamData.playerRoster && teamData.playerRoster.some(player => player.userId === userId)) {
         throw new functions.https.HttpsError(
           'already-exists',
           'Already a member of this team'
@@ -122,7 +158,8 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       }
 
       // Check if team is full using fresh data
-      if (teamData.playerRoster.length >= teamData.maxPlayers) {
+      const currentMemberCount = teamData.playerRoster ? teamData.playerRoster.length : 0;
+      if (currentMemberCount >= teamData.maxPlayers) {
         throw new functions.https.HttpsError(
           'failed-precondition',
           'Team is full'
@@ -131,14 +168,14 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
 
       const now = FieldValue.serverTimestamp();
 
-      // Create new player object with fresh user data
+      // Create new player object
       const newPlayer = {
         userId: userId,
         displayName: freshUserData.displayName,
         initials: freshUserData.initials
       };
 
-      // Update team document
+      // Update team document with new member
       transaction.update(teamDoc.ref, {
         playerRoster: FieldValue.arrayUnion(newPlayer),
         lastActivityAt: now
@@ -167,6 +204,20 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
       transaction.update(userRef, {
         teams: updatedTeams,
         updatedAt: now
+      });
+
+      // Log player joined event
+      await logPlayerMovementEvent(db, transaction, EVENT_TYPES.JOINED, {
+        teamId: teamDoc.id,
+        teamName: teamData.teamName,
+        userId,
+        player: {
+          displayName: freshUserData.displayName,
+          initials: freshUserData.initials
+        },
+        details: {
+          joinMethod: 'joinCode'
+        }
       });
 
       return {

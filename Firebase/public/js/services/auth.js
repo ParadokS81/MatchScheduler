@@ -520,6 +520,22 @@ const AuthService = (() => {
     retryAttempts = 0;
   };
 
+  /**
+   * Get user ID from user object (single source of truth)
+   * @param {Object} user - User object from state
+   * @returns {string|null} User ID or null if not available
+   */
+  const getUserId = (user) => {
+    // Primary: Use uid from Firebase Auth (always present when signed in)
+    if (user?.uid) return user.uid;
+    
+    // Fallback: Use uid from profile (should match the above)
+    if (user?.profile?.uid) return user.profile.uid;
+    
+    // No valid user ID found
+    return null;
+  };
+
   // Public API
   return {
     init,
@@ -530,8 +546,12 @@ const AuthService = (() => {
     getUserProfile,
     isAuthenticated,
     hasProfile,
+    getUserId,
     cleanup,
-    refreshProfile
+    refreshProfile,
+    
+    // Debug utilities (dev only)
+    ...(isDevelopment() ? { viewDebugLogs } : {})
   };
 })();
 
@@ -547,5 +567,6 @@ export const {
   getUserProfile,
   isAuthenticated,
   hasProfile,
+  getUserId,
   refreshProfile
 } = AuthService; 

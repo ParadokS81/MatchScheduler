@@ -6,6 +6,13 @@ console.log('admin exists?', typeof require('firebase-admin') !== 'undefined');
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
+const { getCurrentWeekId, EVENT_TYPES, logTeamLifecycleEvent, logPlayerMovementEvent } = require('../utils/helpers');
+
+// Initialize admin if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 console.log('admin loaded, apps length:', admin.apps?.length);
 console.log('admin.firestore exists?', typeof admin.firestore === 'function');
@@ -15,155 +22,198 @@ console.log('1. About to import FieldValue directly');
 console.log('2. admin.firestore type:', typeof admin.firestore);
 console.log('3. admin.firestore.FieldValue exists?', !!admin.firestore.FieldValue);
 
-// Test Gemini's solution: Direct import instead of destructuring
-const { FieldValue } = require("firebase-admin/firestore");
-
 console.log('4. FieldValue imported successfully:', typeof FieldValue);
 console.log('5. FieldValue.serverTimestamp exists?', !!FieldValue.serverTimestamp);
 
+/**
+ * Create a new team and add creator as owner
+ */
 exports.createTeam = functions.https.onCall(async (data, context) => {
-  const db = admin.firestore();
+  // Verify authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in to create team');
+  }
+
+  const { 
+    teamName,           // From Team Name field
+    displayName,        // Optional: From Display Name field
+    initials,          // Optional: From Initials field
+    divisions = [],     // From Divisions checkboxes
+    maxPlayers = 5     // From Max Players dropdown
+  } = data;
   
+  // Validate team name (3-25 characters)
+  if (!teamName || typeof teamName !== 'string' || 
+      teamName.trim().length < 3 || teamName.trim().length > 25) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Team name must be between 3 and 25 characters'
+    );
+  }
+
+  // Validate divisions (at least one selected)
+  const validDivisions = ['Division 1', 'Division 2', 'Division 3'];
+  if (!Array.isArray(divisions) || divisions.length === 0 || 
+      !divisions.every(div => validDivisions.includes(div))) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'You must select at least one valid division'
+    );
+  }
+
+  // Validate max players (between 1 and 20)
+  const maxPlayersNum = parseInt(maxPlayers);
+  if (isNaN(maxPlayersNum) || maxPlayersNum < 1 || maxPlayersNum > 20) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Max players must be between 1 and 20'
+    );
+  }
+
+  const db = admin.firestore();
+  const userId = context.auth.uid;
+  const timestamp = FieldValue.serverTimestamp();
+
   try {
-    // 1. Check authentication
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to create a team.');
-    }
-
-    const userId = context.auth.uid;
-    const { teamName, divisions, maxPlayers } = data;
-
-    // 2. Validate user has profile
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'You must complete your profile before creating a team.'
-      );
-    }
-    const userData = userDoc.data();
-
-    // 3. Check user's team count
-    const teamCount = userData.teams ? Object.keys(userData.teams).length : 0;
-    if (teamCount >= 2) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'You can only be a member of up to 2 teams.'
-      );
-    }
-
-    // 4 & 5. Validate team name
-    if (!teamName || typeof teamName !== 'string' || 
-        teamName.trim().length < 3 || teamName.trim().length > 25) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Team name must be between 3 and 25 characters.'
-      );
-    }
-
-    const nameRegex = /^[a-zA-Z0-9\s\-_]+$/;
-    if (!nameRegex.test(teamName)) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Team name can only contain letters, numbers, spaces, dashes, and underscores.'
-      );
-    }
-
-    // 6. Validate divisions
-    const validDivisions = ['1', '2', '3'];
-    if (!Array.isArray(divisions) || divisions.length === 0 || 
-        !divisions.every(div => validDivisions.includes(div))) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'You must select at least one valid division (1, 2, or 3).'
-      );
-    }
-
-    // Move team creation and uniqueness check into transaction for better concurrency handling
     const result = await db.runTransaction(async (transaction) => {
-      // Check team name uniqueness inside transaction
+      // Get user profile
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await transaction.get(userRef);
+      
+      // If profile data is provided, create/update user profile
+      if (displayName && initials) {
+        // Validate display name and initials
+        if (typeof displayName !== 'string' || 
+            displayName.trim().length < 2 || displayName.trim().length > 20) {
+          throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Display name must be between 2 and 20 characters'
+          );
+        }
+        
+        if (typeof initials !== 'string' || initials.trim().length !== 3) {
+          throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Initials must be exactly 3 characters'
+          );
+        }
+
+        // Create or update user profile
+        if (!userDoc.exists) {
+          transaction.set(userRef, {
+            displayName: displayName.trim(),
+            initials: initials.trim().toUpperCase(),
+            teams: {},
+            createdAt: timestamp
+          });
+        } else {
+          transaction.update(userRef, {
+            displayName: displayName.trim(),
+            initials: initials.trim().toUpperCase()
+          });
+        }
+      } else if (!userDoc.exists) {
+        // If no profile data provided and no profile exists, throw error
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'User profile is required to create a team'
+        );
+      }
+
+      // Get user data (either existing or just created)
+      const userData = userDoc.exists ? userDoc.data() : {
+        displayName: displayName.trim(),
+        initials: initials.trim().toUpperCase()
+      };
+
+      // Check if team name is already taken
       const existingTeamQuery = await transaction.get(
         db.collection('teams')
           .where('teamName', '==', teamName.trim())
           .where('active', '==', true)
-          .where('archived', '==', false)
       );
       
       if (!existingTeamQuery.empty) {
         throw new functions.https.HttpsError(
           'already-exists',
-          'A team with this name already exists.'
+          'A team with this name already exists'
         );
       }
 
-      // 8. Generate unique join code
-      const joinCode = generateJoinCode();
-
+      // Create new team document
       const teamRef = db.collection('teams').doc();
-      
-      console.log('6. About to call FieldValue.serverTimestamp()');
-      console.log('7. FieldValue at runtime:', typeof FieldValue);
-      console.log('8. FieldValue.serverTimestamp at runtime:', typeof FieldValue.serverTimestamp);
-      
-      const now = FieldValue.serverTimestamp();
-      
-      console.log('9. serverTimestamp() called successfully, result:', typeof now);
-
-      // 9. Create team document with all required fields
       const teamData = {
-        teamId: teamRef.id,
         teamName: teamName.trim(),
+        divisions,
+        maxPlayers: maxPlayersNum,
+        createdAt: timestamp,
+        createdBy: userId,
         leaderId: userId,
-        maxPlayers: maxPlayers || 10,
-        teamLogoUrl: null,
-        divisions: divisions,
-        joinCode: joinCode,
-        joinCodeCreatedAt: now,
-        active: true,      // Team starts active
-        archived: false,   // Team is not deleted
-        createdAt: now,
-        lastActivityAt: now,
-        playerRoster: [{
-          userId: userId,
-          displayName: userData.displayName,
-          initials: userData.initials,
-          role: 'leader'
-        }]
+        active: true,
+        archived: false,
+        joinCode: generateJoinCode(),
+        playerRoster: [
+          {
+            userId: userId,
+            displayName: userData.displayName,
+            initials: userData.initials
+          }
+        ]
       };
-
-      // Create team
+      
       transaction.set(teamRef, teamData);
 
-      // 11. Update user's teams map using proper Firebase method
-      // Note: Security rules expect teams to be a map, not an array
-      const currentTeams = userData.teams || {};
-      const updatedTeams = { ...currentTeams, [teamRef.id]: true };
-      
-      transaction.update(userDoc.ref, {
-        teams: updatedTeams
+      // Create TEAM_CREATED event (team lifecycle - NO userId field)
+      const teamCreatedEventId = await logTeamLifecycleEvent(db, transaction, EVENT_TYPES.TEAM_CREATED, {
+        teamId: teamRef.id,
+        teamName: teamName.trim(),
+        // NO userId field - this is a team event, not player-specific
+        details: {
+          divisions,
+          maxPlayers: maxPlayersNum,
+          creator: {
+            displayName: userData.displayName,
+            initials: userData.initials
+          }
+        }
+      });
+
+      // Create JOINED event (player movement - WITH userId field)
+      const playerJoinedEventId = await logPlayerMovementEvent(db, transaction, EVENT_TYPES.JOINED, {
+        teamId: teamRef.id,
+        teamName: teamName.trim(),
+        userId, // This is a player-specific event
+        player: {
+          displayName: userData.displayName,
+          initials: userData.initials
+        },
+        details: {
+          role: 'owner',
+          isFounder: true
+        }
+      });
+
+      // Update user's teams list
+      transaction.update(userRef, {
+        [`teams.${teamRef.id}`]: true
       });
 
       return {
-        teamId: teamRef.id,
-        teamName: teamData.teamName,
-        joinCode: joinCode
+        success: true,
+        data: {
+          teamId: teamRef.id,
+          teamName: teamName.trim(),
+          teamCreatedEventId,
+          playerJoinedEventId
+        }
       };
     });
 
-    // 12. Return success response with proper message format
-    return {
-      success: true,
-      data: result,
-      message: `Team "${teamName.trim()}" created successfully!`
-    };
+    return result;
 
   } catch (error) {
-    // 14. Error handling with logging
     console.error('Error creating team:', error);
-    if (error instanceof functions.https.HttpsError) {
-      throw error;
-    }
-    throw new functions.https.HttpsError('internal', 'An unexpected error occurred while creating the team.');
+    throw new functions.https.HttpsError('internal', 'Failed to create team');
   }
 });
 

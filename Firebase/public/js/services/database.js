@@ -217,13 +217,17 @@ const DatabaseService = (() => {
 
   /**
    * Leave a team
-   * @param {Object} params - Parameters containing teamId
+   * @param {Object} params - Parameters containing teamId and optional archiveNote
    * @returns {Promise<Object>} Response with success, data, message
    */
-  const leaveTeam = async ({ teamId }) => {
+  const leaveTeam = async ({ teamId, archiveNote }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('leaveTeam')({ teamId });
+      const params = { teamId };
+      if (archiveNote !== undefined && archiveNote !== null && archiveNote !== '') {
+        params.archiveNote = archiveNote;
+      }
+      const result = await functions.httpsCallable('leaveTeam')(params);
       return result.data;
     } catch (error) {
       console.error('Database Service: leaveTeam failed:', error);

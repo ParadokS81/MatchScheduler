@@ -4,6 +4,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require("firebase-admin/firestore");
+const { EVENT_TYPES, logPlayerMovementEvent } = require('../utils/helpers');
 
 /**
  * Removes a player from a team. Only the team leader can remove players.
@@ -87,7 +88,7 @@ async function removePlayer(data, context) {
       }
 
       // Find target player in roster using fresh data
-      const targetPlayer = team.playerRoster.find(player => player.userId === targetUserId);
+      const targetPlayer = team.playerRoster && team.playerRoster.find(player => player.userId === targetUserId);
       if (!targetPlayer) {
         throw new functions.https.HttpsError('not-found', `User is not a member of team "${teamName}".`);
       }
@@ -101,9 +102,9 @@ async function removePlayer(data, context) {
       const updatedUserTeams = { ...currentTeams };
       delete updatedUserTeams[teamId];
 
-      // Update team document
+      // Update team document - remove the member
       transaction.update(teamRef, {
-        playerRoster: team.playerRoster.filter(player => player.userId !== targetUserId),
+        playerRoster: FieldValue.arrayRemove(targetPlayer),
         lastActivityAt: now
       });
 
@@ -111,6 +112,21 @@ async function removePlayer(data, context) {
       transaction.update(targetUserRef, {
         teams: updatedUserTeams,
         updatedAt: now
+      });
+
+      // Log player kicked event
+      await logPlayerMovementEvent(db, transaction, EVENT_TYPES.KICKED, {
+        teamId: teamId,
+        teamName: teamName,
+        userId: targetUserId,
+        player: {
+          displayName: targetPlayer.displayName,
+          initials: targetPlayer.initials
+        },
+        details: {
+          kickedBy: userId,
+          kickedByName: leaderDoc.data().displayName
+        }
       });
 
       return {
@@ -265,6 +281,21 @@ async function transferLeadership(data, context) {
         updatedAt: now
       });
 
+      // Log leadership transfer event
+      await logPlayerMovementEvent(db, transaction, EVENT_TYPES.TRANSFERRED_LEADERSHIP, {
+        teamId: teamId,
+        teamName: teamName,
+        userId: newLeaderId,
+        player: {
+          displayName: newLeader.displayName,
+          initials: newLeader.initials
+        },
+        details: {
+          transferredBy: userId,
+          transferredByName: currentLeaderDoc.data().displayName
+        }
+      });
+
       return {
         newLeader: newLeader.displayName,
         teamName: teamName
@@ -297,7 +328,7 @@ async function transferLeadership(data, context) {
  * @param {string} data.teamId The ID of the team
  * @param {string} [data.teamName] Optional new team name
  * @param {string[]} [data.divisions] Optional new divisions array
- * @param {number} [data.maxPlayers] Optional new max players (5-10)
+ * @param {number} [data.maxPlayers] Optional new max players (1-20)
  * @param {string} [data.teamLogoUrl] Optional team logo URL
  * @param {Object} context Functions context containing auth info
  * @returns {Promise<Object>} Success response with updated team info
@@ -332,8 +363,8 @@ async function updateTeamSettings(data, context) {
   // Handle maxPlayers
   if ('maxPlayers' in data) {
     const maxPlayers = data.maxPlayers;
-    if (!Number.isInteger(maxPlayers) || maxPlayers < 5 || maxPlayers > 10) {
-      throw new functions.https.HttpsError('invalid-argument', 'Max players must be between 5 and 10.');
+    if (!Number.isInteger(maxPlayers) || maxPlayers < 1 || maxPlayers > 20) {
+      throw new functions.https.HttpsError('invalid-argument', 'Max players must be between 1 and 20.');
     }
     updates.maxPlayers = maxPlayers;
     hasUpdates = true;
@@ -421,13 +452,14 @@ async function updateTeamSettings(data, context) {
       throw new functions.https.HttpsError('failed-precondition', 'You must complete your profile first.');
     }
 
-    // Pre-validate maxPlayers against current roster size outside transaction
-    if (updates.maxPlayers !== undefined && teamData.playerRoster.length > updates.maxPlayers) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        `Max players cannot be less than current roster size (${teamData.playerRoster.length}).`
-      );
-    }
+          // Pre-validate maxPlayers against current roster size outside transaction
+      const currentMemberCount = teamData.playerRoster ? teamData.playerRoster.length : 0;
+      if (updates.maxPlayers !== undefined && currentMemberCount > updates.maxPlayers) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          `Max players cannot be less than current roster size (${currentMemberCount}).`
+        );
+      }
 
     // Use transaction for atomic updates
     const result = await db.runTransaction(async (transaction) => {
@@ -445,13 +477,14 @@ async function updateTeamSettings(data, context) {
         throw new functions.https.HttpsError('permission-denied', 'Only the team leader can update team settings.');
       }
 
-      // Double-check maxPlayers with fresh data
-      if (updates.maxPlayers !== undefined && team.playerRoster.length > updates.maxPlayers) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          `Max players cannot be less than current roster size (${team.playerRoster.length}).`
-        );
-      }
+              // Double-check maxPlayers with fresh data
+        const freshMemberCount = team.playerRoster ? team.playerRoster.length : 0;
+        if (updates.maxPlayers !== undefined && freshMemberCount > updates.maxPlayers) {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Max players cannot be less than current roster size (${freshMemberCount}).`
+          );
+        }
 
       // Add timestamp to updates
       updates.lastActivityAt = FieldValue.serverTimestamp();

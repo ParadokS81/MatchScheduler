@@ -362,9 +362,25 @@ service cloud.firestore {
       }
     }
     
-    // TODO: Add security rules for other collections as needed
+    // Event Log collection - Read-only for users (replaces rosterEvents)
+    match /eventLog/{documentId} {
+      // Anyone authenticated can read (public event history for community feed)
+      allow read: if request.auth != null;
+      
+      // Only Cloud Functions can write (no direct writes from clients)
+      allow write: if false;
+    }
     
-    // Temporary fallback - deny all other access
+    // Legacy rosterEvents collection - Read-only for backward compatibility
+    match /rosterEvents/{documentId} {
+      // Anyone authenticated can read (public roster history for community feed)
+      allow read: if request.auth != null;
+      
+      // Only Cloud Functions can write (no direct writes from clients)
+      allow write: if false;
+    }
+    
+    // Deny all other access by default
     match /{document=**} {
       allow read, write: if false;
     }

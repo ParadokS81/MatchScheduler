@@ -20,6 +20,7 @@ const isDevelopment = () => {
          hostname === '127.0.0.1' || 
          hostname.startsWith('192.168.') || 
          hostname.startsWith('10.') ||
+         hostname.startsWith('100.') ||  // Tailscale range
          hostname.includes('.local');
 };
 
@@ -81,17 +82,20 @@ const initializeFirebase = async () => {
 
       // Hybrid setup: Local functions, Live Auth & Firestore
       if (isDevelopment()) {
+        // Use the current hostname to connect to emulator (works for localhost and Tailscale)
+        const emulatorHost = window.location.hostname;
+        
         console.log('🔧 Development environment - using HYBRID setup:');
-        console.log('  📱 Functions: Local emulator (localhost:5001)');
+        console.log(`  📱 Functions: Local emulator (${emulatorHost}:5001)`);
         console.log('  ☁️ Auth: Live Firebase');
         console.log('  ☁️ Firestore: Live Firebase');
         
         // Configure functions emulator BEFORE using functions
-        functions.useEmulator('localhost', 5001);
-        console.log('🔧 Functions emulator configured for localhost:5001');
+        functions.useEmulator(emulatorHost, 5001);
+        console.log(`🔧 Functions emulator configured for ${emulatorHost}:5001`);
         
         // Test the configuration
-        console.log('🔍 Functions emulator URL should be: http://localhost:5001/createTeam');
+        console.log(`🔍 Functions emulator URL should be: http://${emulatorHost}:5001/createTeam`);
         console.log('🌍 Functions region: europe-west10');
         
         console.log('✅ Hybrid configuration complete');

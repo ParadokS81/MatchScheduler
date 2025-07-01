@@ -4,6 +4,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require("firebase-admin/firestore");
+const { EVENT_TYPES, logPlayerMovementEvent, logTeamLifecycleEvent } = require('../utils/helpers');
 
 exports.leaveTeam = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
@@ -15,7 +16,7 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
     }
 
     const userId = context.auth.uid;
-    const { teamId } = data;
+    const { teamId, archiveNote } = data;
 
     // 2. Validate teamId is provided
     if (!teamId || typeof teamId !== 'string') {
@@ -23,6 +24,42 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
         'invalid-argument',
         'Team ID is required.'
       );
+    }
+
+    // 3. Validate archiveNote if provided
+    let sanitizedArchiveNote = null;
+    if (archiveNote !== undefined && archiveNote !== null) {
+      if (typeof archiveNote !== 'string') {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Archive note must be a string.'
+        );
+      }
+      
+      // Max 200 characters
+      if (archiveNote.length > 200) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Archive note must be 200 characters or less.'
+        );
+      }
+      
+      // Sanitize dangerous characters
+      sanitizedArchiveNote = archiveNote.replace(/[<>&"'/\\`${}()\[\]=+*#@%^|~]/g, '').trim();
+      
+      // Only allow letters, numbers, spaces, basic punctuation (.,!?'-)
+      const allowedPattern = /^[a-zA-Z0-9\s.,!?'-]*$/;
+      if (!allowedPattern.test(sanitizedArchiveNote)) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Archive note contains invalid characters. Only letters, numbers, spaces, and basic punctuation are allowed.'
+        );
+      }
+      
+      // If after sanitization it's empty, set to null
+      if (sanitizedArchiveNote === '') {
+        sanitizedArchiveNote = null;
+      }
     }
 
     // Get references
@@ -42,7 +79,7 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
     const teamName = teamData.teamName;
 
     // 5. Verify user is on the team roster (BEFORE transaction)
-    if (!teamData.playerRoster.some(player => player.userId === userId)) {
+    if (!teamData.playerRoster || !teamData.playerRoster.some(player => player.userId === userId)) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         `Not a member of team "${teamName}"`
@@ -58,7 +95,8 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
       // Check if user is the team leader using fresh data
       if (freshTeamData.leaderId === userId) {
         // If they are the leader, only allow leaving if they are the last member
-        const isLastMember = freshTeamData.playerRoster.length === 1;
+        const currentMemberCount = freshTeamData.playerRoster ? freshTeamData.playerRoster.length : 0;
+        const isLastMember = currentMemberCount === 1;
         if (!isLastMember) {
           throw new functions.https.HttpsError(
             'failed-precondition',
@@ -67,33 +105,78 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
         }
       }
 
-      // Calculate new roster
-      const newRoster = freshTeamData.playerRoster.filter(
-        player => player.userId !== userId
-      );
+      // Find the player object to remove
+      const playerToRemove = freshTeamData.playerRoster.find(player => player.userId === userId);
+      if (!playerToRemove) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Player not found in roster'
+        );
+      }
 
       const now = FieldValue.serverTimestamp();
 
-      // Prepare team update
-      const teamUpdate = {
-        playerRoster: newRoster,
-        lastActivityAt: now
-      };
-
-      // Archive permanently if empty
-      if (newRoster.length === 0) {
-        teamUpdate.active = false;
-        teamUpdate.archived = true;  // Permanently archived - not recoverable
-      }
-
-      // Get current user data to update teams map
+      // Get current user data to update teams map (fetch once, use multiple times)
       const userDoc = await transaction.get(userRef);
       const userData = userDoc.data();
       const currentTeams = userData.teams || {};
+
+      // Prepare team update - remove the member
+      const teamUpdate = {
+        playerRoster: FieldValue.arrayRemove(playerToRemove),
+        lastActivityAt: now
+      };
+
+      // Check if team will be empty after removing this member
+      const remainingMemberCount = freshTeamData.playerRoster ? freshTeamData.playerRoster.length - 1 : 0;
+
+      // Archive permanently if empty
+      if (remainingMemberCount === 0) {
+        teamUpdate.active = false;
+        teamUpdate.archived = true;  // Permanently archived - not recoverable
+        teamUpdate.archivedAt = now;
+        teamUpdate.archivedBy = userId;
+        teamUpdate.archiveReason = 'lastMemberLeft';
+        
+        // Add archive note if provided
+        if (sanitizedArchiveNote) {
+          teamUpdate.archiveNote = sanitizedArchiveNote;
+        }
+        
+        // Log team archived event
+        await logTeamLifecycleEvent(db, transaction, EVENT_TYPES.TEAM_ARCHIVED, {
+          teamId: teamRef.id,
+          teamName: teamName,
+          details: {
+            reason: 'lastMemberLeft',
+            finalMember: {
+              displayName: userData.displayName,
+              initials: userData.initials
+            },
+            archiveNote: sanitizedArchiveNote,
+            archivedBy: userId
+          }
+        });
+      }
       
       // Remove this team from the teams map
       const updatedTeams = { ...currentTeams };
       delete updatedTeams[teamId];
+
+      // Log player left event
+      await logPlayerMovementEvent(db, transaction, EVENT_TYPES.LEFT, {
+        teamId: teamRef.id,
+        teamName: teamName,
+        userId,
+        player: {
+          displayName: userData.displayName,
+          initials: userData.initials
+        },
+        details: {
+          leaveMethod: 'voluntary',
+          wasLastMember: remainingMemberCount === 0
+        }
+      });
 
       // Perform atomic updates
       transaction.update(teamRef, teamUpdate);

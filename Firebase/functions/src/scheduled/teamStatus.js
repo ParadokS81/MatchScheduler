@@ -4,6 +4,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require("firebase-admin/firestore");
+const { EVENT_TYPES, logTeamLifecycleEvent } = require('../utils/helpers');
 const db = admin.firestore();
 
 // Constants for business rules
@@ -161,6 +162,7 @@ exports.checkTeamActivity = functions.pubsub
 
       let inactiveCount = 0;
       let regeneratedCount = 0;
+      const inactiveTeams = [];
       const batch = db.batch();
 
       teams.forEach(doc => {
@@ -172,6 +174,13 @@ exports.checkTeamActivity = functions.pubsub
           updates.active = false;  // Mark as inactive (but still recoverable)
           updates.statusChangedAt = FieldValue.serverTimestamp();
           inactiveCount++;
+          
+          // Log team inactive event (we'll do this in a separate batch after the main updates)
+          inactiveTeams.push({
+            teamId: doc.id,
+            teamName: team.teamName,
+            lastActivity: team.lastActivityAt?.toDate() || team.createdAt?.toDate()
+          });
         }
         
         // Check for old join code
@@ -187,6 +196,20 @@ exports.checkTeamActivity = functions.pubsub
       });
 
       await batch.commit();
+
+      // Log team inactive events in a separate batch
+      if (inactiveTeams.length > 0) {
+        for (const team of inactiveTeams) {
+          await logTeamLifecycleEvent(db, null, EVENT_TYPES.TEAM_INACTIVE, {
+            teamId: team.teamId,
+            teamName: team.teamName,
+            details: {
+              lastActivity: team.lastActivity,
+              inactivityDays: Math.floor((Date.now() - team.lastActivity.getTime()) / (1000 * 60 * 60 * 24))
+            }
+          });
+        }
+      }
 
       console.log(`Scheduled job complete: ${inactiveCount} teams marked inactive, ${regeneratedCount} join codes regenerated`);
       return null;
