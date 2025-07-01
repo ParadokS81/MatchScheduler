@@ -452,14 +452,14 @@ async function updateTeamSettings(data, context) {
       throw new functions.https.HttpsError('failed-precondition', 'You must complete your profile first.');
     }
 
-          // Pre-validate maxPlayers against current roster size outside transaction
+    // Pre-validate maxPlayers against current roster size outside transaction
       const currentMemberCount = teamData.playerRoster ? teamData.playerRoster.length : 0;
       if (updates.maxPlayers !== undefined && currentMemberCount > updates.maxPlayers) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
+      throw new functions.https.HttpsError(
+        'failed-precondition',
           `Max players cannot be less than current roster size (${currentMemberCount}).`
-        );
-      }
+      );
+    }
 
     // Use transaction for atomic updates
     const result = await db.runTransaction(async (transaction) => {
@@ -477,14 +477,14 @@ async function updateTeamSettings(data, context) {
         throw new functions.https.HttpsError('permission-denied', 'Only the team leader can update team settings.');
       }
 
-              // Double-check maxPlayers with fresh data
+      // Double-check maxPlayers with fresh data
         const freshMemberCount = team.playerRoster ? team.playerRoster.length : 0;
         if (updates.maxPlayers !== undefined && freshMemberCount > updates.maxPlayers) {
-          throw new functions.https.HttpsError(
-            'failed-precondition',
+        throw new functions.https.HttpsError(
+          'failed-precondition',
             `Max players cannot be less than current roster size (${freshMemberCount}).`
-          );
-        }
+        );
+      }
 
       // Add timestamp to updates
       updates.lastActivityAt = FieldValue.serverTimestamp();

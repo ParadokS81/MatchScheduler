@@ -18,6 +18,7 @@ const { leaveTeam } = require('./teams/leave');
 const { removePlayer, updateTeamSettings, regenerateJoinCode, transferLeadership } = require('./teams/manage');
 const { updateAvailability } = require('./availability/update');
 const { checkTeamActivity } = require('./scheduled/teamStatus');
+const { processLogoUpload } = require('./teams/logos');
 
 // Export all functions
 exports.createProfile = createProfile;
@@ -31,3 +32,4 @@ exports.regenerateJoinCode = regenerateJoinCode;
 exports.transferLeadership = transferLeadership;
 exports.updateAvailability = updateAvailability;
 exports.checkTeamActivity = checkTeamActivity; 
+exports.processLogoUpload = processLogoUpload; 

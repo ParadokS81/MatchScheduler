@@ -13,6 +13,8 @@ import DatabaseService from '../services/database.js';
 const Modals = (function() {
     let modalContainer;
     let currentModal = null;
+    let cropper = null;
+    let cropperImageElement = null;
 
     // Safe user ID extraction utility
     const getSafeUserId = (user) => {
@@ -63,6 +65,570 @@ const Modals = (function() {
             valid: true, 
             sanitized: sanitized.trim() 
         };
+    }
+
+    /**
+     * Initialize Cropper.js on the image element
+     * @param {string} imageUrl - The URL of the image to load into the cropper
+     */
+    function _initCropper(imageUrl) {
+        if (cropper) {
+            cropper.destroy();
+        }
+
+        cropperImageElement = document.getElementById('logo-cropper-image');
+        if (!cropperImageElement) {
+            console.error("Cropper image element not found.");
+            return;
+        }
+
+        cropperImageElement.src = imageUrl;
+        
+        cropper = new Cropper(cropperImageElement, {
+            aspectRatio: 1,
+            viewMode: 1, // Restrict crop box to within the canvas
+            dragMode: 'move', // Move the canvas (image), not the crop box
+            cropBoxMovable: false, // Crop box stays in center
+            cropBoxResizable: false, // Keep square aspect ratio
+            background: true, // Show grid background
+            center: true, // Show center indicator
+            highlight: true, // Highlight crop area
+            guides: true, // Show guides
+            autoCropArea: 0.8, // Start with 80% of image visible
+            restore: false,
+            responsive: true,
+            toggleDragModeOnDblclick: false,
+            zoomable: true,
+            zoomOnTouch: true,
+            zoomOnWheel: true,
+            wheelZoomRatio: 0.1,
+            minContainerWidth: 200,
+            minContainerHeight: 200,
+        });
+
+        // Enable the save button once the cropper is ready
+        const saveBtn = document.getElementById('save-logo-btn');
+        if(saveBtn) saveBtn.disabled = false;
+    }
+
+    /**
+     * Destroy the Cropper.js instance to free up resources
+     */
+    function _destroyCropper() {
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        if(cropperImageElement) {
+            cropperImageElement.src = "";
+        }
+    }
+
+    /**
+     * Setup event listeners for the logo management modal
+     */
+    function setupLogoManagerEventListeners() {
+        if (!modalContainer) return;
+
+        const modal = modalContainer.querySelector('.fixed');
+        const closeBtn = document.getElementById('close-logo-modal');
+        const cancelBtn = document.getElementById('cancel-logo-modal');
+        const fileInput = document.getElementById('logo-file-input');
+        const saveBtn = document.getElementById('save-logo-btn');
+        const urlInput = document.getElementById('logo-url-input');
+        const urlLoadBtn = document.getElementById('logo-url-load-btn');
+        
+        if (!modal || !closeBtn || !fileInput) {
+            console.error('Modals: Required elements not found for logo manager');
+            return;
+        }
+
+        // --- Close Modal Listeners ---
+        const closeModal = () => {
+            // Memory cleanup
+            _destroyCropper();
+            
+            // Clear file input
+            if (fileInput) {
+                fileInput.value = '';
+            }
+            
+            // Clear URL input
+            if (urlInput) {
+                urlInput.value = '';
+            }
+            
+            hideModal();
+        };
+
+        closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', closeModal);
+        }
+        
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        // Initialize cropper immediately with current logo or placeholder
+        const teamData = StateService.getState('teamData');
+        const currentLogoUrl = teamData?.activeLogo?.urls?.medium || '/assets/images/default-team-logo.png';
+        _initCropper(currentLogoUrl);
+
+        // --- File Processing Function ---
+        const processFile = (file) => {
+            // Validate file exists
+            if (!file) {
+                showLogoError('No file selected.');
+                return;
+            }
+
+            // Validate file type
+            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+            if (!validTypes.includes(file.type.toLowerCase())) {
+                showLogoError('Please select a valid image file (PNG, JPEG, WebP, or GIF).');
+                return;
+            }
+            
+            // Validate file size (max 5MB)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                showLogoError(`File size (${sizeMB}MB) exceeds the 5MB limit. Please choose a smaller image.`);
+                return;
+            }
+
+            // Clear any previous errors
+            clearLogoError();
+
+            // Show loading state
+            showCropperLoading(true);
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    _initCropper(event.target.result);
+                    // Enable both save buttons
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                    }
+                    const footerSaveBtn = document.getElementById('save-logo-btn-footer');
+                    if (footerSaveBtn) {
+                        footerSaveBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error initializing cropper:', error);
+                    showLogoError('Failed to load image. Please try a different file.');
+                } finally {
+                    showCropperLoading(false);
+                }
+            };
+            reader.onerror = () => {
+                showLogoError('Failed to read the selected file. Please try again.');
+                showCropperLoading(false);
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // --- URL Loading Function ---
+        const loadFromUrl = (url) => {
+            const trimmedUrl = url.trim();
+            if (!trimmedUrl) {
+                showLogoError('Please enter a valid image URL.');
+                return;
+            }
+
+            // Basic URL validation
+            try {
+                new URL(trimmedUrl);
+            } catch {
+                showLogoError('Please enter a valid URL.');
+                return;
+            }
+
+            // Clear any previous errors
+            clearLogoError();
+
+            // Show loading state
+            showCropperLoading(true);
+            
+            // Disable load button during loading
+            if (urlLoadBtn) {
+                urlLoadBtn.disabled = true;
+                urlLoadBtn.textContent = 'Loading...';
+            }
+
+            // Create a new image to test if URL is valid
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                try {
+                    _initCropper(trimmedUrl);
+                    // Enable both save buttons
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                    }
+                    const footerSaveBtn = document.getElementById('save-logo-btn-footer');
+                    if (footerSaveBtn) {
+                        footerSaveBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error initializing cropper with URL:', error);
+                    showLogoError('Failed to load image. Please try a different URL.');
+                } finally {
+                    showCropperLoading(false);
+                    // Re-enable load button
+                    if (urlLoadBtn) {
+                        urlLoadBtn.disabled = false;
+                        urlLoadBtn.textContent = 'Load';
+                    }
+                }
+            };
+            img.onerror = () => {
+                showLogoError('Failed to load image from URL. Please check the URL and try again.');
+                showCropperLoading(false);
+                // Re-enable load button
+                if (urlLoadBtn) {
+                    urlLoadBtn.disabled = false;
+                    urlLoadBtn.textContent = 'Load';
+                }
+            };
+            img.src = trimmedUrl;
+        };
+
+        // --- File Input Listener ---
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    processFile(files[0]);
+                }
+            });
+        }
+
+        // --- URL Load Button Listener ---
+        if (urlLoadBtn && urlInput) {
+            urlLoadBtn.addEventListener('click', () => {
+                loadFromUrl(urlInput.value);
+            });
+            
+            // Also allow Enter key in URL input
+            urlInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    loadFromUrl(urlInput.value);
+                }
+            });
+        }
+
+        // --- Cropper Control Listeners ---
+        const zoomSlider = document.getElementById('zoom-slider');
+        const rotateLeftBtn = document.getElementById('rotate-left-btn');
+        const rotateRightBtn = document.getElementById('rotate-right-btn');
+        const flipXBtn = document.getElementById('flip-x-btn');
+        const flipYBtn = document.getElementById('flip-y-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Keep track of flip state
+        let flipX = 1;
+        let flipY = 1;
+
+        if (zoomSlider) {
+            zoomSlider.addEventListener('input', (e) => {
+                if (cropper) {
+                    cropper.zoomTo(e.target.value);
+                }
+            });
+        }
+
+        if (rotateLeftBtn) {
+            rotateLeftBtn.addEventListener('click', () => {
+                if (cropper) cropper.rotate(-90);
+            });
+        }
+
+        if (rotateRightBtn) {
+            rotateRightBtn.addEventListener('click', () => {
+                if (cropper) cropper.rotate(90);
+            });
+        }
+        
+        if (flipXBtn) {
+            flipXBtn.addEventListener('click', () => {
+                if (cropper) {
+                    flipX = -flipX;
+                    cropper.scaleX(flipX);
+                }
+            });
+        }
+        
+        if (flipYBtn) {
+            flipYBtn.addEventListener('click', () => {
+                if (cropper) {
+                    flipY = -flipY;
+                    cropper.scaleY(flipY);
+                }
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                if (cropper) {
+                    cropper.reset();
+                    flipX = 1;
+                    flipY = 1;
+                    if (zoomSlider) {
+                        zoomSlider.value = 1;
+                    }
+                }
+            });
+        }
+
+        // --- Save Button Listeners ---
+        if (saveBtn) {
+            saveBtn.addEventListener('click', handleSaveLogo);
+        }
+        
+        // Also handle footer save button
+        const footerSaveBtn = document.getElementById('save-logo-btn-footer');
+        if (footerSaveBtn) {
+            footerSaveBtn.addEventListener('click', handleSaveLogo);
+        }
+    }
+
+    /**
+     * Show error message in logo modal
+     * @param {string} message - Error message to display
+     */
+    function showLogoError(message) {
+        const errorDiv = document.getElementById('logo-error-message');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Clear error message in logo modal
+     */
+    function clearLogoError() {
+        const errorDiv = document.getElementById('logo-error-message');
+        if (errorDiv) {
+            errorDiv.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Show or hide cropper loading state
+     * @param {boolean} show - Whether to show the loading state
+     */
+    function showCropperLoading(show) {
+        const loadingDiv = document.getElementById('cropper-loading');
+        if (loadingDiv) {
+            if (show) {
+                loadingDiv.classList.remove('hidden');
+            } else {
+                loadingDiv.classList.add('hidden');
+            }
+        }
+    }
+
+    /**
+     * Show success toast message
+     * @param {string} message - Success message to display
+     */
+    function showSuccessToast(message) {
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-[100] flex items-center gap-2 max-w-sm';
+        toast.innerHTML = `
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span class="text-sm font-medium">${message}</span>
+        `;
+
+        // Add to document
+        document.body.appendChild(toast);
+
+        // Animate in
+        toast.style.transform = 'translateX(100%)';
+        toast.style.opacity = '0';
+        requestAnimationFrame(() => {
+            toast.style.transition = 'all 0.3s ease-out';
+            toast.style.transform = 'translateX(0)';
+            toast.style.opacity = '1';
+        });
+
+        // Auto remove after 4 seconds
+        setTimeout(() => {
+            toast.style.transition = 'all 0.3s ease-in';
+            toast.style.transform = 'translateX(100%)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 4000);
+    }
+
+    /**
+     * Create a gallery item for the logo archive
+     * @param {string} logoUrl - URL of the logo image
+     * @param {boolean} isActive - Whether this is the currently active logo
+     * @returns {HTMLElement} - The gallery item element
+     */
+    function createGalleryItem(logoUrl, isActive) {
+        const div = document.createElement('div');
+        div.className = `aspect-square bg-slate-700 rounded-md cursor-pointer hover:ring-2 hover:ring-sky-400 p-1 ${isActive ? 'ring-2 ring-sky-400' : ''}`;
+        div.innerHTML = `<img src="${logoUrl}" class="w-full h-full object-contain">`;
+        div.addEventListener('click', (event) => loadImageToCropper(logoUrl, event));
+        return div;
+    }
+
+    /**
+     * Load an image into the cropper from the archive gallery
+     * @param {string} logoUrl - URL of the logo to load
+     * @param {Event} event - The click event (optional)
+     */
+    function loadImageToCropper(logoUrl, event = null) {
+        _initCropper(logoUrl);
+        
+        // Enable both save buttons
+        const saveBtn = document.getElementById('save-logo-btn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+        }
+        const footerSaveBtn = document.getElementById('save-logo-btn-footer');
+        if (footerSaveBtn) {
+            footerSaveBtn.disabled = false;
+        }
+
+        // Update active state in gallery
+        const galleryItems = document.querySelectorAll('#logo-gallery-grid > div');
+        galleryItems.forEach(item => {
+            item.classList.remove('ring-2', 'ring-sky-400');
+        });
+        
+        // Add active state to clicked item if event is provided
+        if (event) {
+            const clickedItem = event.target.closest('div');
+            if (clickedItem) {
+                clickedItem.classList.add('ring-2', 'ring-sky-400');
+            }
+        }
+    }
+
+    /**
+     * Handles getting the cropped blob, uploading it via DatabaseService,
+     * and managing the UI state.
+     */
+    async function handleSaveLogo() {
+        if (!cropper) {
+            showLogoError('No image has been selected or cropped.');
+            return;
+        }
+
+        const saveBtn = document.getElementById('save-logo-btn');
+        const footerSaveBtn = document.getElementById('save-logo-btn-footer');
+        const teamData = StateService.getState('teamData');
+        const user = StateService.getState('user');
+        const userId = getSafeUserId(user);
+
+        if (!teamData || !userId) {
+            showLogoError('Cannot save logo: Missing user or team data.');
+            return;
+        }
+
+        // Set both buttons to loading state
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+        }
+        if (footerSaveBtn) {
+            footerSaveBtn.disabled = true;
+            footerSaveBtn.textContent = 'Saving...';
+        }
+
+        try {
+            // Get the cropped image as a high-quality blob
+            const canvas = cropper.getCroppedCanvas({
+                width: 512, // Standard high-res size for processing
+                height: 512,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            });
+
+                            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    showLogoError('Could not process the cropped image. Please try again.');
+                    // Reset buttons
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Save Changes';
+                    }
+                    if (footerSaveBtn) {
+                        footerSaveBtn.disabled = false;
+                        footerSaveBtn.textContent = 'Save Changes';
+                    }
+                    return;
+                }
+
+                try {
+                    // Use the DatabaseService to upload the logo
+                    const storagePath = await DatabaseService.uploadLogo(blob, teamData.id, userId);
+                    
+                    console.log('Logo uploaded successfully to temporary path:', storagePath);
+                    
+                    // Show success feedback
+                    showSuccessToast('Logo uploaded successfully! Processing in background...');
+                    
+                    // Refresh team data to show updated logo
+                    try {
+                        await AuthService.refreshProfile();
+                        // Update UI components that display team logo
+                        if (window.TeamInfo && window.TeamInfo.refreshTeamData) {
+                            window.TeamInfo.refreshTeamData();
+                        }
+                    } catch (refreshError) {
+                        console.warn('Failed to refresh team data:', refreshError);
+                    }
+
+                    // Close the modal after successful upload
+                    hideModal();
+
+                } catch (uploadError) {
+                    console.error('Error during logo upload:', uploadError);
+                    showLogoError(uploadError.message || 'Failed to upload the logo.');
+                    // Reset both buttons
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Save Changes';
+                    }
+                    if (footerSaveBtn) {
+                        footerSaveBtn.disabled = false;
+                        footerSaveBtn.textContent = 'Save Changes';
+                    }
+                }
+
+            }, 'image/png'); // Use PNG to preserve transparency
+
+        } catch (error) {
+            console.error('Error getting cropped canvas:', error);
+            showLogoError('An error occurred while preparing the image.');
+            // Reset both buttons
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Changes';
+            }
+            if (footerSaveBtn) {
+                footerSaveBtn.disabled = false;
+                footerSaveBtn.textContent = 'Save Changes';
+            }
+        }
     }
 
     /**
@@ -816,6 +1382,186 @@ const Modals = (function() {
     }
 
     /**
+     * Show the logo management modal
+     */
+    function showLogoManager() {
+        const user = StateService.getState('user');
+        const teamData = StateService.getState('teamData');
+
+        if (!user || !user.profile || !teamData) {
+            console.error('Modals: User or team data not available for logo management.');
+            return;
+        }
+
+        currentModal = 'logo-manager';
+
+        // Use the medium-sized logo URL from the team's activeLogo, or a default placeholder.
+        const currentLogoUrl = teamData.activeLogo?.urls?.medium || '/assets/images/default-team-logo.png';
+
+        // Dynamically create the modal HTML
+        const modalHTML = `
+            <style>
+              @media (max-width: 767px) {
+                .logo-modal-grid {
+                  grid-template-columns: 1fr !important;
+                  grid-template-rows: auto auto auto !important;
+                }
+              }
+            </style>
+            <div class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div class="bg-slate-800 border border-slate-700 rounded-lg shadow-xl w-full max-w-[48rem] h-full max-h-[90vh] flex flex-col">
+                
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0">
+                  <h2 class="text-xl font-bold text-sky-400">Manage Team Logo</h2>
+                  <button id="close-logo-modal" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="flex-grow p-4 overflow-hidden">
+                  <div class="logo-modal-grid grid gap-4 h-full" style="grid-template-columns: clamp(12rem, 25%, 16rem) 1fr; grid-template-rows: 1fr auto;">
+                    
+                    <!-- Left: Controls -->
+                    <div class="controls-section flex flex-col gap-3 bg-slate-800/70 p-4 rounded-lg border border-slate-700">
+                    
+                    <!-- Upload Section -->
+                    <div class="flex flex-col gap-3">
+                      <h3 class="text-lg font-semibold text-slate-200">Upload New Logo</h3>
+                      
+                      <!-- File Input Button -->
+                      <label for="logo-file-input" class="w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold h-8 rounded-md transition-colors flex items-center justify-center gap-2" aria-label="Choose logo file">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        Choose File...
+                      </label>
+                      <input type="file" id="logo-file-input" class="hidden" accept="image/png,image/jpeg,image/webp" aria-label="Logo file input">
+                      
+                      <div class="text-center text-slate-400 text-sm">or</div>
+
+                      <!-- URL Input -->
+                      <div class="flex">
+                        <input type="text" id="logo-url-input" placeholder="Paste image URL..." class="flex-grow bg-slate-700 border border-slate-600 rounded-l-md px-3 h-8 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-label="Image URL">
+                        <button id="logo-url-load-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-semibold px-4 h-8 rounded-r-md transition-colors" aria-label="Load image from URL">Load</button>
+                      </div>
+                      <p class="text-xs text-slate-400">Recommended: 512x512px square PNG with transparency.</p>
+                      
+                      <!-- Error Message -->
+                      <div id="logo-error-message" class="hidden p-2 bg-red-900/50 border border-red-700 rounded-md text-red-200 text-sm"></div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="border-t border-slate-600"></div>
+                    
+                    <!-- Cropper Controls -->
+                    <div class="flex flex-col gap-3">
+                      <h3 class="text-lg font-semibold text-slate-200">Adjust Logo</h3>
+                      
+                      <!-- Zoom Slider -->
+                      <div>
+                        <label for="zoom-slider" class="block text-sm text-slate-300 mb-1">Zoom</label>
+                        <input id="zoom-slider" type="range" min="0" max="2" step="0.01" value="1" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer" aria-label="Zoom level">
+                      </div>
+                      
+                      <!-- Rotate Buttons -->
+                      <div class="grid grid-cols-2 gap-2">
+                        <button id="rotate-left-btn" class="bg-slate-600 hover:bg-slate-500 text-slate-200 h-8 rounded-md text-sm transition-colors" aria-label="Rotate left 90 degrees">Rotate -90°</button>
+                        <button id="rotate-right-btn" class="bg-slate-600 hover:bg-slate-500 text-slate-200 h-8 rounded-md text-sm transition-colors" aria-label="Rotate right 90 degrees">Rotate +90°</button>
+                      </div>
+                      
+                      <!-- Flip Buttons -->
+                      <div class="grid grid-cols-2 gap-2">
+                        <button id="flip-x-btn" class="bg-slate-600 hover:bg-slate-500 text-slate-200 h-8 rounded-md text-sm transition-colors" aria-label="Flip horizontally">Flip H</button>
+                        <button id="flip-y-btn" class="bg-slate-600 hover:bg-slate-500 text-slate-200 h-8 rounded-md text-sm transition-colors" aria-label="Flip vertically">Flip V</button>
+                      </div>
+                      
+                      <!-- Reset Button -->
+                      <button id="reset-btn" class="w-full bg-red-600 hover:bg-red-700 text-white h-8 rounded-md text-sm transition-colors" aria-label="Reset all adjustments">
+                        Reset Adjustments
+                      </button>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="border-t border-slate-600"></div>
+                    
+                    <!-- Save Button -->
+                    <button id="save-logo-btn" class="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:text-slate-400 disabled:cursor-not-allowed text-white h-8 rounded-md font-semibold transition-colors" disabled aria-label="Save logo changes">
+                      Save Changes
+                    </button>
+
+                  </div>
+                  
+                  <!-- Right: Cropper -->
+                  <div class="cropper-section flex flex-col bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                    <div id="logo-cropper-container" class="relative w-full h-full flex items-center justify-center min-h-[20rem]">
+                      <!-- Loading overlay -->
+                      <div id="cropper-loading" class="absolute inset-0 bg-slate-900/75 flex items-center justify-center rounded-md hidden" aria-label="Loading image">
+                        <div class="flex flex-col items-center gap-2">
+                          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400"></div>
+                          <span class="text-sm text-slate-300">Loading image...</span>
+                        </div>
+                      </div>
+                      <!-- Cropper.js will attach to this img element -->
+                      <img id="logo-cropper-image" src="" alt="Image preview for cropping" class="max-w-full max-h-full">
+                    </div>
+                    <p class="text-xs text-slate-400 text-center mt-2 flex-shrink-0">
+                      Use the mouse wheel to zoom. Drag the image to position it.
+                    </p>
+                  </div>
+                  
+                    <!-- Bottom: Archive (spans both columns) -->
+                    <div class="archive-section bg-slate-800/70 p-4 rounded-lg border border-slate-700 flex flex-col min-h-0" style="grid-column: 1 / -1;">
+                      <h3 class="text-lg font-semibold mb-3 text-slate-200 flex-shrink-0">Logo Archive</h3>
+                      <div id="logo-gallery-grid" class="grid gap-2 overflow-y-auto flex-grow" style="grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));">
+                        <!-- Archived logos will be populated here by JavaScript -->
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="flex items-center justify-end p-4 border-t border-slate-700 flex-shrink-0 gap-3">
+                  <button id="delete-logo-btn" class="px-4 py-2 bg-red-800 hover:bg-red-700 text-white font-semibold rounded-md transition-colors hidden" aria-label="Delete active logo">Delete Active Logo</button>
+                  <button id="cancel-logo-modal" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-md transition-colors" aria-label="Cancel logo changes">Cancel</button>
+                  <button id="save-logo-btn-footer" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-md transition-colors disabled:opacity-50" disabled aria-label="Save logo changes">Save Changes</button>
+                </div>
+
+              </div>
+            </div>
+        `;
+
+        modalContainer.innerHTML = modalHTML;
+        modalContainer.classList.remove('hidden');
+
+        // Populate the archive gallery
+        const galleryGrid = document.getElementById('logo-gallery-grid');
+        
+        // Add current logo if exists
+        if (teamData.activeLogo?.urls?.medium || teamData.teamLogoUrl) {
+            const logoUrl = teamData.activeLogo?.urls?.medium || teamData.teamLogoUrl;
+            const item = createGalleryItem(logoUrl, true); // true = active
+            galleryGrid.appendChild(item);
+        }
+
+        // Add archived logos if any
+        if (teamData.logoArchive && Array.isArray(teamData.logoArchive)) {
+            teamData.logoArchive.forEach(logoUrl => {
+                const item = createGalleryItem(logoUrl, false);
+                galleryGrid.appendChild(item);
+            });
+        }
+
+        // Handle empty state gracefully
+        if (galleryGrid.children.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.className = 'col-span-full text-center text-slate-400 text-sm py-4';
+            emptyState.textContent = 'No logos in archive yet. Upload a logo to get started.';
+            galleryGrid.appendChild(emptyState);
+        }
+
+        setupLogoManagerEventListeners(); 
+    }
+
+    /**
      * Handle regular player leaving team
      */
     async function handleRegularPlayerLeave() {
@@ -1021,6 +1767,7 @@ const Modals = (function() {
      * Hide the current modal
      */
     function hideModal() {
+        _destroyCropper();
         if (modalContainer) {
             modalContainer.classList.add('hidden');
             modalContainer.innerHTML = '';
@@ -1433,38 +2180,106 @@ const Modals = (function() {
      * @param {FormData} formData - Form data
      */
     async function handleCreateTeam(formData) {
+        const teamName = formData.get('teamName').trim();
         const teamData = {
-            teamName: formData.get('teamName').trim(),
+            teamName,
             divisions: formData.getAll('divisions').map(d => `Division ${d}`),
             maxPlayers: parseInt(formData.get('maxPlayers'))
         };
 
-        // Check if user needs to create a profile
-        const user = StateService.getState('user');
-        if (!user.profile) {
-            const displayName = formData.get('displayName')?.trim();
-            const initials = formData.get('initials')?.trim();
-            
-            if (!displayName || !initials) {
-                throw new Error('Display name and initials are required');
+        // Set initial operation state
+        StateService.setState('teamOperation', {
+            status: 'creating',
+            name: teamName,
+            error: null,
+            metadata: teamData
+        });
+
+        try {
+            // Check if user needs to create a profile
+            const user = StateService.getState('user');
+            if (!user.profile) {
+                console.log('Modals: Creating user profile first...');
+                const displayName = formData.get('displayName')?.trim();
+                const initials = formData.get('initials')?.trim();
+                
+                if (!displayName || !initials) {
+                    throw new Error('Display name and initials are required');
+                }
+                
+                // Create profile first
+                await AuthService.createProfile({
+                    displayName,
+                    initials
+                });
+                
+                // Wait for profile to be created and refresh
+                console.log('Modals: Waiting for profile to be available...');
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await AuthService.refreshProfile();
+                
+                // Verify profile was created
+                const updatedUser = StateService.getState('user');
+                if (!updatedUser.profile) {
+                    throw new Error('Failed to create user profile');
+                }
+                console.log('Modals: Profile created successfully');
             }
             
-            teamData.displayName = displayName;
-            teamData.initials = initials;
+            // Close modal before the operation for better UX
+            hideModal();
+        
+            console.log('Modals: Creating team...', teamData);
+            const result = await DatabaseService.createTeam(teamData);
             
-            console.log('Modals: Creating team with profile...', teamData);
-        }
-        
-        console.log('Modals: Creating team...', teamData);
-        const result = await DatabaseService.createTeam(teamData);
-        
-        // Refresh user profile to get the updated teams list
-        await AuthService.refreshProfile();
-        
-        // Set the newly created team as current team
-        if (result.success && result.data && result.data.teamId) {
+            if (!result.success || !result.data || !result.data.teamId) {
+                throw new Error('Team creation failed - invalid response');
+            }
+            
+            console.log('Modals: Team created successfully:', result.data.teamId);
+            
+            // Refresh user profile to get the updated teams list
+            await AuthService.refreshProfile();
+            
+            // Add a delay to allow Firestore to complete the write
+            console.log('Modals: Waiting for team data to be available...');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            // Set as current team
+            console.log('Modals: Setting created team as current:', result.data.teamId);
             StateService.setState('currentTeam', result.data.teamId);
-            console.log('Modals: Set new team as current:', result.data.teamId);
+            
+            // Reset operation state on success
+            StateService.setState('teamOperation', {
+                status: 'idle',
+                name: null,
+                error: null,
+                metadata: null
+            });
+            
+            // Force page reload if we created a profile
+            if (!user.profile) {
+                console.log('Modals: Reloading page to complete setup...');
+                window.location.reload();
+                return;
+            }
+            
+        } catch (error) {
+            console.error('Modals: Team creation failed:', error);
+            
+            // Set error state
+            StateService.setState('teamOperation', {
+                status: 'error',
+                name: teamName,
+                error: error.message || 'Failed to create team',
+                metadata: teamData
+            });
+            
+            // Reset UI state
+            StateService.setState('currentTeam', null);
+            StateService.setState('teamData', null);
+            
+            throw error; // Re-throw to be handled by form submit handler
         }
     }
 
@@ -1480,6 +2295,9 @@ const Modals = (function() {
         
         // Refresh user profile to get the updated teams list
         await AuthService.refreshProfile();
+        
+        // Small delay to ensure state is fully updated
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // Set the newly joined team as current team if result contains teamId
         if (result && result.success && result.data && result.data.teamId) {
@@ -1553,6 +2371,7 @@ const Modals = (function() {
         showTransferLeadershipModal,
         showKickPlayersModal,
         showLeaveTeamModal,
+        showLogoManager,
         hideModal
     };
 })();

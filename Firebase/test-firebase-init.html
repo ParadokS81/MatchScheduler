@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Initialization Test</title>
+</head>
+<body>
+    <h1>Firebase Initialization Test</h1>
+    <div id="status">Loading...</div>
+    
+    <script type="module">
+        console.log('🧪 Starting Firebase initialization test...');
+        
+        // Import Firebase config (this should initialize everything)
+        import { app, auth, db, functions, storage, isFirebaseReady } from './public/js/config/firebase.js';
+        
+        // Import database service (this should use pre-initialized services)
+        import { DatabaseService } from './public/js/services/database.js';
+        
+        console.log('📊 Firebase services after import:');
+        console.log('  app:', !!app);
+        console.log('  auth:', !!auth);
+        console.log('  db:', !!db);
+        console.log('  functions:', !!functions);
+        console.log('  storage:', !!storage);
+        console.log('  isReady:', isFirebaseReady());
+        
+        // Wait a moment for initialization
+        setTimeout(() => {
+            const statusDiv = document.getElementById('status');
+            if (isFirebaseReady()) {
+                statusDiv.innerHTML = '✅ Firebase initialized successfully!';
+                statusDiv.style.color = 'green';
+                
+                // Test database service initialization
+                try {
+                    DatabaseService.init();
+                    console.log('✅ Database Service initialized successfully');
+                } catch (error) {
+                    console.error('❌ Database Service initialization failed:', error);
+                    statusDiv.innerHTML += '<br>❌ Database Service failed: ' + error.message;
+                    statusDiv.style.color = 'red';
+                }
+            } else {
+                statusDiv.innerHTML = '❌ Firebase initialization failed';
+                statusDiv.style.color = 'red';
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

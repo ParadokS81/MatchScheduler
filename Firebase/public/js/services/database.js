@@ -4,13 +4,30 @@
  * Provides real-time listeners and utility methods
  */
 
-import { getDb, getFunctions } from '../config/firebase.js';
+import { db, functions, storage } from '../config/firebase.js';
+import { 
+    ref, 
+    uploadBytes, 
+    getDownloadURL 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { 
+    httpsCallable 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import { 
+    enableNetwork, 
+    disableNetwork,
+    doc,
+    getDoc,
+    onSnapshot,
+    query,
+    collection,
+    where,
+    getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const DatabaseService = (() => {
   // Private variables
   let initialized = false;
-  let db = null;
-  let functions = null;
   
   // Active subscriptions for cleanup
   const activeSubscriptions = new Map();
@@ -45,10 +62,22 @@ const DatabaseService = (() => {
    * @throws {Error} If response indicates failure
    */
   const handleFunctionResponse = (response) => {
-    if (!response.success) {
-      throw new Error(response.message || 'Operation failed');
+    console.log('Handling function response:', response);
+    
+    // Check if response is already in the correct format
+    if (response && typeof response === 'object' && 'success' in response) {
+      if (!response.success) {
+        throw new Error(response.message || 'Operation failed');
+      }
+      return response;
     }
-    return response.data;
+    
+    // If not, wrap it in our standard format
+    return {
+      success: true,
+      data: response,
+      message: 'Operation successful'
+    };
   };
 
   /**
@@ -62,11 +91,14 @@ const DatabaseService = (() => {
     }
 
     try {
-      db = getDb();
-      functions = getFunctions();
+      // Firebase services are already initialized in firebase.js
+      // Just verify they're available
+      if (!db || !functions || !storage) {
+        throw new Error('Firebase services not available. Ensure firebase.js is loaded first.');
+      }
       
       // Set up connection state monitoring using Firestore's built-in network state
-      db.enableNetwork().then(() => {
+      enableNetwork(db).then(() => {
         isOnline = true;
         notifyConnectionState(true);
       }).catch(() => {
@@ -155,7 +187,8 @@ const DatabaseService = (() => {
     validateParams(profileData, ['displayName']);
     
     try {
-      const result = await functions.httpsCallable('createProfile')(profileData);
+      const createProfileFn = httpsCallable(functions, 'createProfile');
+      const result = await createProfileFn(profileData);
       return handleFunctionResponse(result.data);
     } catch (error) {
       console.error('Database Service: createProfile failed:', error);
@@ -173,7 +206,8 @@ const DatabaseService = (() => {
     validateParams(profileData, ['displayName']);
     
     try {
-      const result = await functions.httpsCallable('updateProfile')(profileData);
+      const updateProfileFn = httpsCallable(functions, 'updateProfile');
+      const result = await updateProfileFn(profileData);
       return handleFunctionResponse(result.data);
     } catch (error) {
       console.error('Database Service: updateProfile failed:', error);
@@ -191,8 +225,15 @@ const DatabaseService = (() => {
     validateParams(teamData, ['teamName', 'divisions']);
     
     try {
-      const result = await functions.httpsCallable('createTeam')(teamData);
-      return handleFunctionResponse(result.data);
+      console.log('Creating team with data:', teamData);
+      const createTeamFn = httpsCallable(functions, 'createTeam');
+      const result = await createTeamFn(teamData);
+      console.log('Raw team creation result:', result);
+      
+      const processedResponse = handleFunctionResponse(result.data);
+      console.log('Processed team creation response:', processedResponse);
+      
+      return processedResponse;
     } catch (error) {
       console.error('Database Service: createTeam failed:', error);
       throw new Error(error.message || 'Failed to create team');
@@ -207,7 +248,8 @@ const DatabaseService = (() => {
   const joinTeam = async ({ joinCode }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('joinTeam')({ joinCode });
+      const joinTeamFn = httpsCallable(functions, 'joinTeam');
+      const result = await joinTeamFn({ joinCode });
       return result.data;
     } catch (error) {
       console.error('Database Service: joinTeam failed:', error);
@@ -227,11 +269,43 @@ const DatabaseService = (() => {
       if (archiveNote !== undefined && archiveNote !== null && archiveNote !== '') {
         params.archiveNote = archiveNote;
       }
-      const result = await functions.httpsCallable('leaveTeam')(params);
+      const leaveTeamFn = httpsCallable(functions, 'leaveTeam');
+      const result = await leaveTeamFn(params);
       return result.data;
     } catch (error) {
       console.error('Database Service: leaveTeam failed:', error);
       throw new Error(error.message || 'Failed to leave team');
+    }
+  };
+
+  /**
+   * Uploads a logo to the temporary storage path.
+   * @param {Blob} fileBlob - The image file blob to upload.
+   * @param {string} teamId - The ID of the team.
+   * @param {string} userId - The ID of the user uploading the file.
+   * @returns {Promise<string>} The full path of the uploaded file in Cloud Storage.
+   */
+  const uploadLogo = async (fileBlob, teamId, userId) => {
+    ensureInitialized();
+    if (!fileBlob || !teamId || !userId) {
+      throw new Error("Missing required parameters for logo upload.");
+    }
+
+    // Use the pre-initialized storage service
+    const uniqueFileName = `logo_${Date.now()}.png`;
+    const storagePath = `logo-uploads/${teamId}/${userId}/${uniqueFileName}`;
+    const storageRef = ref(storage, storagePath);
+
+    console.log(`Uploading logo to: ${storagePath}`);
+
+    try {
+      const snapshot = await uploadBytes(storageRef, fileBlob);
+      console.log('Upload successful!', snapshot);
+      return snapshot.ref.fullPath; // Return the full path for the backend function to find.
+    } catch (error) {
+      console.error("Error uploading logo to Firebase Storage:", error);
+      // Re-throw the error to be handled by the calling function.
+      throw new Error("Failed to upload logo.");
     }
   };
 
@@ -243,7 +317,8 @@ const DatabaseService = (() => {
   const removePlayer = async ({ teamId, targetUserId }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('removePlayer')({ teamId, targetUserId });
+      const removePlayerFn = httpsCallable(functions, 'removePlayer');
+      const result = await removePlayerFn({ teamId, targetUserId });
       return result.data;
     } catch (error) {
       console.error('Database Service: removePlayer failed:', error);
@@ -259,7 +334,8 @@ const DatabaseService = (() => {
   const updateTeamSettings = async ({ teamId, ...settings }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('updateTeamSettings')({ teamId, ...settings });
+      const updateTeamSettingsFn = httpsCallable(functions, 'updateTeamSettings');
+      const result = await updateTeamSettingsFn({ teamId, ...settings });
       return result.data;
     } catch (error) {
       console.error('Database Service: updateTeamSettings failed:', error);
@@ -275,7 +351,8 @@ const DatabaseService = (() => {
   const regenerateJoinCode = async ({ teamId }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('regenerateJoinCode')({ teamId });
+      const regenerateJoinCodeFn = httpsCallable(functions, 'regenerateJoinCode');
+      const result = await regenerateJoinCodeFn({ teamId });
       return result.data;
     } catch (error) {
       console.error('Database Service: regenerateJoinCode failed:', error);
@@ -291,7 +368,8 @@ const DatabaseService = (() => {
   const transferLeadership = async ({ teamId, newLeaderId }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('transferLeadership')({ teamId, newLeaderId });
+      const transferLeadershipFn = httpsCallable(functions, 'transferLeadership');
+      const result = await transferLeadershipFn({ teamId, newLeaderId });
       return result.data;
     } catch (error) {
       console.error('Database Service: transferLeadership failed:', error);
@@ -307,7 +385,8 @@ const DatabaseService = (() => {
   const updateAvailability = async ({ teamId, weekId, action, slots }) => {
     ensureInitialized();
     try {
-      const result = await functions.httpsCallable('updateAvailability')({ 
+      const updateAvailabilityFn = httpsCallable(functions, 'updateAvailability');
+      const result = await updateAvailabilityFn({ 
         teamId, weekId, action, slots 
       });
       return result.data;
@@ -333,7 +412,8 @@ const DatabaseService = (() => {
     const RETRY_DELAY = 1000;
 
     const startListener = () => {
-      unsubscribe = ref.onSnapshot(
+      unsubscribe = onSnapshot(
+        ref,
         (snapshot) => {
           retryCount = 0; // Reset on successful update
           onData(snapshot);
@@ -370,11 +450,12 @@ const DatabaseService = (() => {
     ensureInitialized();
     validateParams({ teamId }, ['teamId']);
     
+    const teamDocRef = doc(db, 'teams', teamId);
     const unsubscribe = createResilientListener(
-      db.collection('teams').doc(teamId),
-      (doc) => {
-        if (doc.exists) {
-          callback({ id: doc.id, ...doc.data() });
+      teamDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          callback({ id: docSnap.id, ...docSnap.data() });
         } else {
           callback(null);
         }
@@ -399,11 +480,12 @@ const DatabaseService = (() => {
     // PRD specifies top-level availability collection with compound document IDs
     // Document ID format: {teamId}_{weekId} (e.g., "team_abc123_2025-W26")
     const documentId = `${teamId}_${weekId}`;
+    const availabilityDocRef = doc(db, 'availability', documentId);
     
-    const unsubscribe = db.collection('availability').doc(documentId)
-      .onSnapshot(
-        (doc) => {
-          callback(doc.exists ? doc.data() : null);
+    const unsubscribe = onSnapshot(
+      availabilityDocRef,
+      (docSnap) => {
+        callback(docSnap.exists() ? docSnap.data() : null);
         },
         (error) => {
           console.error('Database Service: Availability subscription error:', error);
@@ -424,11 +506,12 @@ const DatabaseService = (() => {
   const subscribeToUser = (userId, callback) => {
     ensureInitialized();
     
-    const unsubscribe = db.collection('users').doc(userId)
-      .onSnapshot(
-        (doc) => {
-          if (doc.exists) {
-            callback({ id: doc.id, ...doc.data() });
+    const userDocRef = doc(db, 'users', userId);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          callback({ id: docSnap.id, ...docSnap.data() });
           } else {
             callback(null);
           }
@@ -452,13 +535,15 @@ const DatabaseService = (() => {
   const getAllActiveTeams = async () => {
     ensureInitialized();
     try {
-      const snapshot = await db.collection('teams')
-        .where('active', '==', true)
-        .get();
+      const teamsQuery = query(
+        collection(db, 'teams'),
+        where('active', '==', true)
+      );
+      const snapshot = await getDocs(teamsQuery);
 
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      return snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
       }));
     } catch (error) {
       console.error('Database Service: getAllActiveTeams failed:', error);
@@ -474,14 +559,16 @@ const DatabaseService = (() => {
   const getTeamsByDivision = async (division) => {
     ensureInitialized();
     try {
-      const snapshot = await db.collection('teams')
-        .where('division', '==', division)
-        .where('active', '==', true)
-        .get();
+      const divisionQuery = query(
+        collection(db, 'teams'),
+        where('division', '==', division),
+        where('active', '==', true)
+      );
+      const snapshot = await getDocs(divisionQuery);
 
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      return snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
       }));
     } catch (error) {
       console.error('Database Service: getTeamsByDivision failed:', error);
@@ -497,9 +584,10 @@ const DatabaseService = (() => {
   const getTeam = async (teamId) => {
     ensureInitialized();
     try {
-      const doc = await db.collection('teams').doc(teamId).get();
-      if (doc.exists) {
-        return { id: doc.id, ...doc.data() };
+      const teamDocRef = doc(db, 'teams', teamId);
+      const docSnap = await getDoc(teamDocRef);
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
       }
       return null;
     } catch (error) {
@@ -518,24 +606,26 @@ const DatabaseService = (() => {
     validateParams({ userId }, ['userId']);
 
     try {
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) return [];
+      const userDocRef = doc(db, 'users', userId);
+      const userDocSnap = await getDoc(userDocRef);
+      if (!userDocSnap.exists()) return [];
 
-      const teams = userDoc.data().teams || {};
+      const teams = userDocSnap.data().teams || {};
       const teamIds = Object.keys(teams);
       
       // Use Promise.allSettled for resilient parallel fetching
-      const teamPromises = teamIds.map(teamId =>
-        db.collection('teams').doc(teamId).get()
-          .then(doc => ({
+      const teamPromises = teamIds.map(teamId => {
+        const teamDocRef = doc(db, 'teams', teamId);
+        return getDoc(teamDocRef)
+          .then(docSnap => ({
             status: 'fulfilled',
-            value: doc.exists ? { id: doc.id, ...doc.data() } : null
+            value: docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null
           }))
           .catch(error => ({
             status: 'rejected',
             reason: error
-          }))
-      );
+          }));
+      });
 
       const results = await Promise.allSettled(teamPromises);
       
@@ -554,6 +644,29 @@ const DatabaseService = (() => {
     } catch (error) {
       console.error('Database Service: getUserTeams failed:', error);
       throw new Error('Failed to fetch user teams');
+    }
+  };
+
+  /**
+   * Get team data directly (no subscription)
+   * @param {string} teamId - Team ID to fetch
+   * @returns {Promise<Object>} Team data
+   */
+  const getTeamData = async (teamId) => {
+    ensureInitialized();
+    validateParams({ teamId }, ['teamId']);
+    
+    try {
+      const teamDocRef = doc(db, 'teams', teamId);
+      const docSnap = await getDoc(teamDocRef);
+      
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error('Database Service: getTeamData failed:', error);
+      throw new Error('Failed to get team data');
     }
   };
 
@@ -582,6 +695,7 @@ const DatabaseService = (() => {
     createTeam,
     joinTeam,
     leaveTeam,
+    uploadLogo,
     removePlayer,
     updateTeamSettings,
     regenerateJoinCode,
@@ -598,6 +712,7 @@ const DatabaseService = (() => {
     getTeam,
     getTeamsByDivision,
     getUserTeams,
+    getTeamData,
     // Cleanup
     cleanup
   };

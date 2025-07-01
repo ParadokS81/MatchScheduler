@@ -15,6 +15,12 @@ const StateService = (() => {
       yourTeamPlayers: 4,    // Default minimum players
       opponentPlayers: 4,    // Default minimum players
       selectedOpponents: []  // Array of selected team IDs for comparison
+    },
+    teamOperation: {         // Structured state for team operations
+      status: 'idle',        // 'idle' | 'creating' | 'joining' | 'leaving' | 'error'
+      name: null,           // Name of team being operated on
+      error: null,          // Error message if status is 'error'
+      metadata: null        // Additional operation-specific data
     }
   };
 
@@ -25,7 +31,8 @@ const StateService = (() => {
     teamData: new Set(),
     weekOffset: new Set(),
     favorites: new Set(),
-    filters: new Set()
+    filters: new Set(),
+    teamOperation: new Set()
   };
 
   // Valid state keys for validation
@@ -41,7 +48,17 @@ const StateService = (() => {
     teamData: (value) => value === null || (typeof value === 'object' && value.id),
     weekOffset: (value) => typeof value === 'number' && (value === 0 || value === 1),
     favorites: (value) => Array.isArray(value) && value.every(id => typeof id === 'string'),
-    filters: (value) => typeof value === 'object' && value !== null
+    filters: (value) => typeof value === 'object' && value !== null,
+    teamOperation: (value) => {
+      if (!value || typeof value !== 'object') return false;
+      const validStatuses = ['idle', 'creating', 'joining', 'leaving', 'error'];
+      return (
+        validStatuses.includes(value.status) &&
+        (value.name === null || typeof value.name === 'string') &&
+        (value.error === null || typeof value.error === 'string') &&
+        (value.metadata === null || typeof value.metadata === 'object')
+      );
+    }
   };
 
   /**
@@ -125,6 +142,7 @@ const StateService = (() => {
       case 'weekOffset': return 'number (0 or 1)';
       case 'favorites': return 'array of strings';
       case 'filters': return 'object';
+      case 'teamOperation': return 'object';
       default: return 'unknown';
     }
   };

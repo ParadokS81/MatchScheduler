@@ -111,7 +111,7 @@ exports.leaveTeam = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError(
           'failed-precondition',
           'Player not found in roster'
-        );
+      );
       }
 
       const now = FieldValue.serverTimestamp();

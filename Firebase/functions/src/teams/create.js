@@ -160,14 +160,13 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
           }
         ]
       };
-      
+
       transaction.set(teamRef, teamData);
 
       // Create TEAM_CREATED event (team lifecycle - NO userId field)
       const teamCreatedEventId = await logTeamLifecycleEvent(db, transaction, EVENT_TYPES.TEAM_CREATED, {
         teamId: teamRef.id,
         teamName: teamName.trim(),
-        // NO userId field - this is a team event, not player-specific
         details: {
           divisions,
           maxPlayers: maxPlayersNum,
@@ -182,7 +181,7 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
       const playerJoinedEventId = await logPlayerMovementEvent(db, transaction, EVENT_TYPES.JOINED, {
         teamId: teamRef.id,
         teamName: teamName.trim(),
-        userId, // This is a player-specific event
+        userId,
         player: {
           displayName: userData.displayName,
           initials: userData.initials
@@ -198,22 +197,30 @@ exports.createTeam = functions.https.onCall(async (data, context) => {
         [`teams.${teamRef.id}`]: true
       });
 
+      // Return success response with team ID
       return {
-        success: true,
-        data: {
-          teamId: teamRef.id,
-          teamName: teamName.trim(),
-          teamCreatedEventId,
-          playerJoinedEventId
+        teamId: teamRef.id,
+        teamName: teamName.trim(),
+        events: {
+          teamCreated: teamCreatedEventId,
+          playerJoined: playerJoinedEventId
         }
       };
     });
 
-    return result;
+    // Return properly formatted response
+    return {
+      success: true,
+      data: result,
+      message: 'Team created successfully'
+    };
 
   } catch (error) {
-    console.error('Error creating team:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to create team');
+    console.error('Team creation failed:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      error.message || 'Failed to create team'
+    );
   }
 });
 

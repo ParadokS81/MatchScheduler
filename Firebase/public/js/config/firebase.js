@@ -1,7 +1,15 @@
 /**
  * Firebase Configuration Module
  * Handles Firebase app initialization, service setup, and emulator configuration
+ * Uses Firebase v9+ modular SDK
  */
+
+// Import Firebase v9+ modular SDK
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFunctions, connectFunctionsEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 // Firebase App Configuration
 const firebaseConfig = {
@@ -29,14 +37,15 @@ let firebaseInitialized = false;
 let initializationError = null;
 let initializationPromise = null;
 
-// Service references
+// Service references - initialized once and exported
 let app = null;
 let auth = null;
 let db = null;
 let functions = null;
+let storage = null;
 
 /**
- * Initialize Firebase services with error handling
+ * Initialize Firebase services with error handling using v9+ modular SDK
  */
 const initializeFirebase = async () => {
   // Return existing promise if initialization is in progress
@@ -46,39 +55,37 @@ const initializeFirebase = async () => {
 
   // Return existing services if already initialized
   if (firebaseInitialized) {
-    return { app, auth, db, functions };
+    return { app, auth, db, functions, storage };
   }
 
   initializationPromise = (async () => {
     try {
-      console.log('🔥 Initializing Firebase...');
+      console.log('🔥 Initializing Firebase with v9+ modular SDK...');
       console.log('🔍 Current initialization state:', { 
         firebaseInitialized, 
         hasError: !!initializationError,
         promiseExists: !!initializationPromise 
       });
-      
-      // Check if Firebase SDK is loaded
-      if (typeof firebase === 'undefined') {
-        throw new Error('Firebase SDK not loaded. Make sure Firebase scripts are included before this module.');
-      }
 
       // Initialize Firebase App if not already initialized
-      console.log(`🔍 Checking Firebase apps: ${firebase.apps.length} existing apps`);
-      if (firebase.apps.length > 0) {
-        console.log(`📱 Using existing Firebase app: ${firebase.apps[0].name}`);
-        app = firebase.apps[0];
+      const existingApps = getApps();
+      console.log(`🔍 Checking Firebase apps: ${existingApps.length} existing apps`);
+      
+      if (existingApps.length > 0) {
+        console.log(`📱 Using existing Firebase app: ${existingApps[0].name}`);
+        app = getApp();
       } else {
         console.log('📱 Creating new Firebase app...');
-        app = firebase.initializeApp(firebaseConfig);
+        app = initializeApp(firebaseConfig);
       }
       console.log(`✓ Firebase app initialized for project: ${firebaseConfig.projectId}`);
 
-      // Initialize Services
-      auth = firebase.auth();
-      db = firebase.firestore();
-      functions = firebase.functions(); // Initialize without region for emulator
-      console.log('✓ Firebase services initialized');
+      // Initialize ALL services immediately after app initialization
+      auth = getAuth(app);
+      db = getFirestore(app);
+      functions = getFunctions(app);
+      storage = getStorage(app);
+      console.log('✓ All Firebase services initialized (Auth, Firestore, Functions, Storage)');
 
       // Hybrid setup: Local functions, Live Auth & Firestore
       if (isDevelopment()) {
@@ -89,14 +96,11 @@ const initializeFirebase = async () => {
         console.log(`  📱 Functions: Local emulator (${emulatorHost}:5001)`);
         console.log('  ☁️ Auth: Live Firebase');
         console.log('  ☁️ Firestore: Live Firebase');
+        console.log('  ☁️ Storage: Live Firebase');
         
         // Configure functions emulator BEFORE using functions
-        functions.useEmulator(emulatorHost, 5001);
+        connectFunctionsEmulator(functions, emulatorHost, 5001);
         console.log(`🔧 Functions emulator configured for ${emulatorHost}:5001`);
-        
-        // Test the configuration
-        console.log(`🔍 Functions emulator URL should be: http://${emulatorHost}:5001/createTeam`);
-        console.log('🌍 Functions region: europe-west10');
         
         console.log('✅ Hybrid configuration complete');
       } else {
@@ -104,12 +108,12 @@ const initializeFirebase = async () => {
       }
       
       // Set auth persistence to LOCAL for all environments
-      await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      await setPersistence(auth, browserLocalPersistence);
       
       // Only enable Firestore persistence in full local development (not hybrid)
       // Hybrid setup (live Firestore + local functions) can cause persistence conflicts
       if (isDevelopment() && false) { // Disabled for hybrid setup
-        await db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+        await enableIndexedDbPersistence(db, { synchronizeTabs: true }).catch((err) => {
           if (err.code === 'failed-precondition') {
             console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
           } else if (err.code === 'unimplemented') {
@@ -121,7 +125,7 @@ const initializeFirebase = async () => {
       firebaseInitialized = true;
       console.log('✅ Firebase initialization complete');
       
-      return { app, auth, db, functions };
+      return { app, auth, db, functions, storage };
       
     } catch (error) {
       initializationError = error;
@@ -147,7 +151,7 @@ const getFirebaseServices = async () => {
     throw initializationError;
   }
   
-  return { app, auth, db, functions };
+  return { app, auth, db, functions, storage };
 };
 
 /**
@@ -164,14 +168,57 @@ const getInitializationStatus = () => ({
   environment: isDevelopment() ? 'development' : 'production'
 });
 
-// Individual service getters (for convenience)
-const getApp = () => app;
-const getAuth = () => auth;
-const getDb = () => db;
-const getFunctions = () => functions;
+// Individual service getters - these return the initialized instances
+const getAppInstance = () => {
+  if (!firebaseInitialized) {
+    throw new Error('Firebase not initialized. Call initializeFirebase() first.');
+  }
+  return app;
+};
 
-// Export services and utilities
+const getAuthInstance = () => {
+  if (!firebaseInitialized) {
+    throw new Error('Firebase not initialized. Call initializeFirebase() first.');
+  }
+  return auth;
+};
+
+const getDbInstance = () => {
+  if (!firebaseInitialized) {
+    throw new Error('Firebase not initialized. Call initializeFirebase() first.');
+  }
+  return db;
+};
+
+const getFunctionsInstance = () => {
+  if (!firebaseInitialized) {
+    throw new Error('Firebase not initialized. Call initializeFirebase() first.');
+  }
+  return functions;
+};
+
+const getStorageInstance = () => {
+  if (!firebaseInitialized) {
+    throw new Error('Firebase not initialized. Call initializeFirebase() first.');
+  }
+  return storage;
+};
+
+// Initialize Firebase immediately when this module is loaded
+console.log('🔥 Starting Firebase initialization...');
+initializeFirebase().catch(error => {
+  console.error('❌ Failed to initialize Firebase:', error);
+});
+
+// Export initialized services and utilities
 export {
+  // Pre-initialized service instances (available after initializeFirebase completes)
+  app,
+  auth, 
+  db,
+  functions,
+  storage,
+  
   // Main services
   getFirebaseServices,
   initializeFirebase,
@@ -181,9 +228,10 @@ export {
   getInitializationStatus,
   isDevelopment,
   
-  // Individual service getters
-  getApp,
-  getAuth,
-  getDb,
-  getFunctions
+  // Individual service getters (with error checking)
+  getAppInstance,
+  getAuthInstance,
+  getDbInstance,
+  getFunctionsInstance,
+  getStorageInstance
 }; 

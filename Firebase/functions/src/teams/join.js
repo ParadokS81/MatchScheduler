@@ -83,7 +83,7 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
         }
         
         if (!initials || typeof initials !== 'string' || initials.trim().length !== 3) {
-          throw new functions.https.HttpsError(
+        throw new functions.https.HttpsError(
             'invalid-argument',
             'Initials must be exactly 3 characters'
           );
@@ -102,13 +102,13 @@ exports.joinTeam = functions.https.onCall(async (data, context) => {
         transaction.set(userRef, freshUserData);
       } else {
         freshUserData = freshUserDoc.data();
-        
-        // DEFENSIVE: Ensure user data is valid
-        if (!freshUserData) {
-          throw new functions.https.HttpsError(
-            'failed-precondition',
-            'User profile data is invalid'
-          );
+      
+      // DEFENSIVE: Ensure user data is valid
+      if (!freshUserData) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'User profile data is invalid'
+        );
         }
       }
 

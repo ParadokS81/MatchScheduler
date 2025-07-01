@@ -21,15 +21,45 @@ const App = (function() {
   const MAX_INIT_ATTEMPTS = 3;
   const INIT_RETRY_DELAY = 2000;
 
+  // Subscription tracking and circuit breaker
+  const subscriptionAttempts = new Map();
+  const SUBSCRIPTION_LIMIT = 3;
+  const SUBSCRIPTION_WINDOW = 60000; // 1 minute
+  const SUBSCRIPTION_BACKOFF = 2000; // 2 seconds
+
   // Active subscriptions for cleanup
   const stateSubscriptions = new Set();
   const databaseSubscriptions = new Set();
+  const activeTeamSubscriptions = new Map(); // Track active team subscriptions
 
   // Track current team subscription for cleanup during rapid changes
   let currentTeamUnsubscribe = null;
   let currentUserUnsubscribe = null;
   let currentSubscribedUserId = null; // Track which user we're subscribed to
   let titleUpdateTimeout = null;
+
+  /**
+   * Check if subscription attempts exceed limit
+   * @param {string} key - Subscription key (teamId or userId)
+   * @returns {boolean} - True if should throttle
+   */
+  const shouldThrottleSubscription = (key) => {
+    const now = Date.now();
+    const attempts = subscriptionAttempts.get(key) || [];
+    
+    // Clean up old attempts
+    const recentAttempts = attempts.filter(time => now - time < SUBSCRIPTION_WINDOW);
+    
+    if (recentAttempts.length >= SUBSCRIPTION_LIMIT) {
+      console.warn(`🚫 Throttling subscription for ${key} - too many attempts`);
+      return true;
+    }
+    
+    // Update attempts
+    recentAttempts.push(now);
+    subscriptionAttempts.set(key, recentAttempts);
+    return false;
+  };
 
   /**
    * Track state subscription for cleanup
@@ -157,12 +187,24 @@ const App = (function() {
    * Clean up current team subscription
    */
   const cleanupTeamSubscription = () => {
+    console.log('🧹 Cleaning up team subscription');
+    
     if (currentTeamUnsubscribe) {
       try {
+        // Get the team ID from active subscriptions
+        for (const [teamId, unsubscribe] of activeTeamSubscriptions.entries()) {
+          if (unsubscribe === currentTeamUnsubscribe) {
+            activeTeamSubscriptions.delete(teamId);
+            console.log('🗑️ Removed subscription for team:', teamId);
+            break;
+          }
+        }
+        
         currentTeamUnsubscribe();
         databaseSubscriptions.delete(currentTeamUnsubscribe);
+        console.log('✅ Team subscription cleanup complete');
       } catch (error) {
-        console.warn('App: Error cleaning up team subscription:', error);
+        console.warn('⚠️ Error cleaning up team subscription:', error);
       }
       currentTeamUnsubscribe = null;
     }
@@ -191,44 +233,80 @@ const App = (function() {
   };
 
   /**
-   * Subscribe to team updates with debouncing for rapid changes
+   * Subscribe to team updates with retry logic
    * @param {string} teamId - Team ID to subscribe to
    * @returns {Promise<void>}
    */
   const subscribeToTeamUpdates = async (teamId) => {
+    console.log('🔄 subscribeToTeamUpdates called for:', teamId);
+    
+    // Check if we're already subscribed to this team
+    if (activeTeamSubscriptions.has(teamId)) {
+        console.log('✋ Already subscribed to team:', teamId);
+        return;
+    }
+
     // Clean up existing subscription first
     cleanupTeamSubscription();
 
-    try {
-      // Set up new subscription
-      currentTeamUnsubscribe = databaseService.subscribeToTeam(teamId, (team, error) => {
-        if (error) {
-          console.error('App: Team subscription error:', error);
-          handleError(new Error('Lost connection to team data'));
-          return;
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
+
+    const attemptSubscription = async () => {
+        try {
+            // First try to get the initial team data
+            console.log('📥 Fetching initial team data...');
+            const teamData = await databaseService.getTeamData(teamId);
+            
+            if (!teamData) {
+                throw new Error('Team data not found');
+            }
+
+            // Set initial team data
+            console.log('✅ Initial team data received:', teamData);
+            stateService.setState('teamData', teamData);
+            
+            // Now set up real-time subscription
+            console.log('🔄 Setting up real-time subscription...');
+            const unsubscribe = databaseService.subscribeToTeam(teamId, (updatedTeam, error) => {
+                if (error) {
+                    console.error('❌ Team subscription error:', error);
+                    return;
+                }
+                
+                if (!updatedTeam) {
+                    console.warn('⚠️ Team update received but no data');
+                    return;
+                }
+                
+                console.log('📥 Team update received:', updatedTeam);
+                stateService.setState('teamData', updatedTeam);
+            });
+
+            // Track subscription for cleanup
+            activeTeamSubscriptions.set(teamId, unsubscribe);
+            currentTeamUnsubscribe = unsubscribe;
+            
+            console.log('✅ Team subscription setup complete');
+            
+        } catch (error) {
+            console.error('❌ Team subscription failed:', error);
+            
+            if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`🔄 Retrying subscription (${retryCount}/${maxRetries})...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                return attemptSubscription();
+            } else {
+                console.error('❌ Max retries reached, subscription failed');
+                stateService.setState('teamData', null);
+                throw error;
+            }
         }
+    };
 
-        if (!team) {
-          // Team was deleted
-          console.warn(`App: Team ${teamId} was deleted`);
-          stateService.setState('teamData', null);
-          stateService.setState('currentTeam', null);
-          handleError(new Error('Team has been deleted'));
-          return;
-        }
-
-        // Update team data in state
-        stateService.setState('teamData', team);
-      });
-
-      // Track for cleanup
-      databaseSubscriptions.add(currentTeamUnsubscribe);
-
-    } catch (error) {
-      console.error('App: Failed to subscribe to team updates:', error);
-      handleError(new Error('Failed to load team data'));
-      stateService.setState('teamData', null);
-    }
+    await attemptSubscription();
   };
 
   /**
@@ -361,23 +439,60 @@ const App = (function() {
     });
 
     // Current team changes
-    subscribeToState('currentTeam', async (teamId) => {
-      console.log('App: Current team changed:', teamId);
+    subscribeToState('currentTeam', async (teamId, prevTeamId) => {
+      console.log('🔄 Current team changed:', { from: prevTeamId, to: teamId });
+      
+      // Skip if team hasn't actually changed
+      if (teamId === prevTeamId) {
+        console.log('⏭️ Team ID unchanged, skipping subscription update');
+        return;
+      }
+
+      // Clean up old subscription first
+      cleanupTeamSubscription();
+      
+      // Clear team data immediately when switching teams
+      stateService.setState('teamData', null);
+
       if (teamId) {
         try {
+          // Set loading state
+          stateService.setState('teamOperation', {
+            status: 'loading',
+            name: null,
+            error: null,
+            metadata: null
+          });
+          
+          // Try to subscribe to new team
           await subscribeToTeamUpdates(teamId);
           
           // Reset week offset when team changes
           stateService.setState('weekOffset', 0);
           
-          await refreshData();
+          // Reset operation state
+          stateService.setState('teamOperation', {
+            status: 'idle',
+            name: null,
+            error: null,
+            metadata: null
+          });
+          
         } catch (error) {
-          console.error('App: Failed to handle team change:', error);
-          handleError(error);
+          console.error('❌ App: Failed to handle team change:', error);
+          
+          // Set error state
+          stateService.setState('teamOperation', {
+            status: 'error',
+            name: null,
+            error: error.message || 'Failed to load team data',
+            metadata: null
+          });
+          
+          // Clear team selection on error
+          stateService.setState('currentTeam', null);
+          stateService.setState('teamData', null);
         }
-      } else {
-        cleanupTeamSubscription();
-        stateService.setState('teamData', null);
       }
     });
 
@@ -648,8 +763,6 @@ const App = (function() {
     }
     return teams[teamId] === true;
   };
-
-
 
   // Public API
   return {

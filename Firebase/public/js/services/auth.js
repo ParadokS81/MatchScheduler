@@ -3,8 +3,21 @@
  * Manages authentication state and user profiles
  */
 
-import { getAuth, getDb, getFunctions } from '../config/firebase.js';
-import { isDevelopment } from '../config/firebase.js';
+import { auth, db, functions, isDevelopment } from '../config/firebase.js';
+import { 
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut as firebaseSignOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { 
+    httpsCallable 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import { 
+    doc, 
+    getDoc, 
+    updateDoc 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import stateService from './state.js';
 
 const AuthService = (() => {
@@ -54,17 +67,18 @@ const AuthService = (() => {
   const fetchUserProfile = async (uid) => {
     console.log('🔍 fetchUserProfile called for uid:', uid);
     try {
-      const db = getDb();
+      // Use the pre-initialized db service
       console.log('📂 Getting user document from Firestore...');
-      const doc = await db.collection('users').doc(uid).get();
-      console.log('📂 Document fetch result:', { exists: doc.exists, id: doc.id });
+      const userDocRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(userDocRef);
+      console.log('📂 Document fetch result:', { exists: docSnap.exists(), id: docSnap.id });
       
-      if (!doc.exists) {
+      if (!docSnap.exists()) {
         console.log('❌ No profile found for user:', uid);
         return null;
       }
 
-      const profile = doc.data();
+      const profile = docSnap.data();
       
       // DEFENSIVE HANDLING: Handle legacy array format or malformed data
       let teams = profile?.teams;
@@ -97,14 +111,15 @@ const AuthService = (() => {
       // Fetch all teams in parallel
       const teamPromises = teamIds.map(async teamId => {
         try {
-          const teamDoc = await db.collection('teams').doc(teamId).get();
-          if (!teamDoc.exists) {
+          const teamDocRef = doc(db, 'teams', teamId);
+          const teamDocSnap = await getDoc(teamDocRef);
+          if (!teamDocSnap.exists()) {
             console.warn(`Team ${teamId} not found - removing from user's teams`);
             // We'll handle cleanup of non-existent teams later
             return null;
           }
           
-          const teamData = teamDoc.data();
+          const teamData = teamDocSnap.data();
           // Only include active teams where user is still in playerRoster
           if (!teamData.active) {
             console.warn(`Team ${teamId} is not active - skipping`);
@@ -118,7 +133,7 @@ const AuthService = (() => {
           }
 
           return {
-            id: teamDoc.id,
+            id: teamDocSnap.id,
             ...teamData
           };
         } catch (error) {
@@ -140,7 +155,8 @@ const AuthService = (() => {
           validTeamIds.forEach(teamId => {
             validTeamsMap[teamId] = true;
           });
-          await db.collection('users').doc(uid).update({
+          const userUpdateRef = doc(db, 'users', uid);
+          await updateDoc(userUpdateRef, {
             teams: validTeamsMap
           });
           // Update the profile's teams map to match
@@ -177,8 +193,9 @@ const AuthService = (() => {
    */
   const updateLastLogin = async (uid) => {
     try {
-      const db = getDb();
-      await db.collection('users').doc(uid).update({
+      // Use the pre-initialized db service
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
         lastLogin: new Date().toISOString()
       });
     } catch (error) {
@@ -340,10 +357,13 @@ const AuthService = (() => {
       return;
     }
 
-    const auth = getAuth();
+    // Use the pre-initialized auth service
+    if (!auth) {
+      throw new Error('Auth service not available. Ensure firebase.js is loaded first.');
+    }
     
     // Set up auth state listener
-    unsubscribeAuthState = auth.onAuthStateChanged(handleAuthStateChanged);
+    unsubscribeAuthState = onAuthStateChanged(auth, handleAuthStateChanged);
     
     initialized = true;
     console.log('🔐 Auth service initialized');
@@ -355,15 +375,15 @@ const AuthService = (() => {
    */
   const signInWithGoogle = async () => {
     try {
-      const auth = getAuth();
-      const provider = new firebase.auth.GoogleAuthProvider();
+      // Use the pre-initialized auth service
+      const provider = new GoogleAuthProvider();
       provider.setCustomParameters({
         prompt: 'select_account'
       });
       
       // Try popup method instead of redirect to avoid domain issues
       debugLog('🚀 Starting Google sign-in with popup...');
-      const result = await auth.signInWithPopup(provider);
+      const result = await signInWithPopup(auth, provider);
       debugLog('✅ Sign-in popup completed:', result.user ? 'Success' : 'Failed');
       
       // Auth state listener will handle the rest
@@ -380,8 +400,8 @@ const AuthService = (() => {
    */
   const signOut = async () => {
     try {
-      const auth = getAuth();
-      await auth.signOut();
+      // Use the pre-initialized auth service
+      await firebaseSignOut(auth);
       // Auth state listener will handle state cleanup
     } catch (error) {
       console.error('Sign-out failed:', error);
@@ -395,7 +415,7 @@ const AuthService = (() => {
    * @returns {Promise<Object>} Updated profile
    */
   const updateProfile = async (profileData) => {
-    const auth = getAuth();
+    // Use the pre-initialized auth service
     const user = auth.currentUser;
     
     if (!user) {
@@ -403,7 +423,7 @@ const AuthService = (() => {
     }
 
     try {
-      const functions = getFunctions();
+      // Use the pre-initialized functions service
       
       // Check if profile exists to determine which function to call
       const existingProfile = await fetchUserProfile(user.uid);
@@ -412,7 +432,8 @@ const AuthService = (() => {
       console.log(`AuthService: Calling ${functionName} with data:`, profileData);
       
       // Call the appropriate Cloud Function
-      const result = await functions.httpsCallable(functionName)(profileData);
+      const functionRef = httpsCallable(functions, functionName);
+      const result = await functionRef(profileData);
       
       if (result.data.success) {
         console.log('AuthService: Profile operation successful');
@@ -445,7 +466,7 @@ const AuthService = (() => {
    * @returns {Object|null} Firebase user object
    */
   const getCurrentUser = () => {
-    const auth = getAuth();
+    // Use the pre-initialized auth service
     return auth.currentUser;
   };
 
@@ -463,7 +484,7 @@ const AuthService = (() => {
    * @returns {Promise<Object|null>} Updated profile or null if not authenticated
    */
   const refreshProfile = async () => {
-    const auth = getAuth();
+    // Use the pre-initialized auth service
     const user = auth.currentUser;
     
     if (!user) {
@@ -483,6 +504,50 @@ const AuthService = (() => {
         photoURL: user.photoURL,
         profile: updatedProfile
       });
+
+      // Handle team selection after profile refresh (same logic as in handleAuthStateChanged)
+      const userTeamIds = updatedProfile?.teams ? Object.keys(updatedProfile.teams) : [];
+      console.log('🏆 User teams after refresh:', userTeamIds);
+      
+      if (userTeamIds.length > 0) {
+        // Get current team selection
+        const currentTeam = stateService.getState('currentTeam');
+        
+        // Get previously selected team from local storage if it exists
+        const lastTeamId = localStorage.getItem(`lastTeam_${user.uid}`);
+        console.log('💾 Last team from storage:', lastTeamId);
+        
+        // Check if current team is still valid
+        const currentTeamStillValid = currentTeam && userTeamIds.includes(currentTeam);
+        
+        // Check if last team is still valid
+        const lastTeamStillValid = userTeamIds.includes(lastTeamId);
+        
+        if (!currentTeamStillValid) {
+          // Current team is not valid, need to select a new one
+          if (lastTeamStillValid) {
+            // Restore last selected team
+            console.log('✅ Restoring last team after refresh:', lastTeamId);
+            stateService.setState('currentTeam', lastTeamId);
+          } else if (userTeamIds.length === 1) {
+            // Auto-select if user has exactly one team
+            const teamId = userTeamIds[0];
+            console.log('🎯 Auto-selecting single team after refresh:', teamId);
+            stateService.setState('currentTeam', teamId);
+            localStorage.setItem(`lastTeam_${user.uid}`, teamId);
+          } else {
+            // If user has multiple teams and no valid selection, don't auto-select
+            console.log('🚫 Multiple teams, no auto-selection after refresh');
+            stateService.setState('currentTeam', null);
+            localStorage.removeItem(`lastTeam_${user.uid}`);
+          }
+        }
+      } else {
+        // No teams available, clear selection
+        console.log('🚫 No teams available after refresh');
+        stateService.setState('currentTeam', null);
+        localStorage.removeItem(`lastTeam_${user.uid}`);
+      }
 
       console.log('AuthService: Profile refreshed successfully');
       return updatedProfile;
